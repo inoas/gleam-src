@@ -1373,7 +1373,7 @@ get_name(Person) ->
 
 -spec main() -> fun((integer(), integer()) -> one:t(any())).
 main() ->
-    fun(A, B) -> {c, A, B} end.
+    fun(Field@0, Field@1) -> {c, Field@0, Field@1} end.
 "
                     .to_string()
                 ),
@@ -1434,7 +1434,7 @@ id(X) ->
 
 -spec make() -> fun((integer()) -> one:t()).
 make() ->
-    one:id(fun(A) -> {x, A} end).
+    one:id(fun(Field@0) -> {x, Field@0} end).
 "
                     .to_string()
                 ),
@@ -1530,7 +1530,7 @@ make_list() ->
 
 -spec main() -> fun((integer(), integer()) -> one:t(any())).
 main() ->
-    fun(A, B) -> {c, A, B} end.
+    fun(Field@0, Field@1) -> {c, Field@0, Field@1} end.
 "
                     .to_string()
                 ),
@@ -1947,7 +1947,7 @@ pub fn x() { one.A }"
 
 -spec x() -> fun((binary()) -> one:a()).
 x() ->
-    fun(A) -> {a, A} end.
+    fun(Field@0) -> {a, Field@0} end.
 "
                     .to_string()
                 ),
