@@ -20,7 +20,7 @@
     <link id="syntax-theme" rel="stylesheet" href="{{ unnest }}/css/atom-one-light.min.css?v={{ gleam_version }}"/>
     <!-- The docs_config.js file is provided by HexDocs and shared
       between multiple versions of the same package. -->
-    <script src="{{ unnest }}/docs_config.js" type="application/javascript"></script>
+    <script src="{{ unnest }}/docs_config.js"></script>
   </head>
   <body class="prewrap-off theme-light drawer-closed">
     <script>
@@ -155,7 +155,7 @@
         <span id="project-version">
           <span> - v{{ project_version }} </span>
         </span>
-        <script>
+        <script >
           "use strict";
 
           if ("undefined" !== typeof versionNodes) {
