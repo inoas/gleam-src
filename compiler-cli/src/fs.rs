@@ -208,8 +208,8 @@ pub fn write_output(file: &OutputFile) -> Result<(), Error> {
     write(path, data)
 }
 
-pub fn write(path: &Path, text: &OutputFileData) -> Result<(), Error> {
-    write_bytes(path, &text.vecu8ify())
+pub fn write(path: &Path, data: &OutputFileData) -> Result<(), Error> {
+    write_bytes(path, &data.vecu8ify())
 }
 
 #[cfg(target_family = "unix")]
