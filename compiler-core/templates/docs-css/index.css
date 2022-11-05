@@ -167,6 +167,7 @@ pre {
 }
 
 pre > code,
+pre code.hljs,
 code.hljs {
   padding: var(--small-gap) var(--gap);
   background: transparent;
