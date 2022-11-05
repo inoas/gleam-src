@@ -199,13 +199,13 @@ pub fn write_outputs_under(outputs: &[OutputFile], base: &Path) -> Result<(), Er
 }
 
 pub fn write_output_under(file: &OutputFile, base: &Path) -> Result<(), Error> {
-    let OutputFile { path, text } = file;
-    write(&base.join(path), text)
+    let OutputFile { path, data } = file;
+    write(&base.join(path), data)
 }
 
 pub fn write_output(file: &OutputFile) -> Result<(), Error> {
-    let OutputFile { path, text } = file;
-    write(path, text)
+    let OutputFile { path, data } = file;
+    write(path, data)
 }
 
 pub fn write(path: &Path, text: &OutputFileData) -> Result<(), Error> {
@@ -395,10 +395,10 @@ pub fn create_tar_archive(outputs: Vec<OutputFile>) -> Result<Vec<u8>, Error> {
             path: file.path.clone(),
             err: e.to_string(),
         })?;
-        header.set_size(file.text.vecu8ify().as_slice().len() as u64);
+        header.set_size(file.data.vecu8ify().as_slice().len() as u64);
         header.set_cksum();
         builder
-            .append(&header, file.text.vecu8ify().as_slice())
+            .append(&header, file.data.vecu8ify().as_slice())
             .map_err(|e| Error::AddTar {
                 path: file.path.clone(),
                 err: e.to_string(),

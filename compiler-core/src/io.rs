@@ -73,7 +73,7 @@ impl OutputFileData {
 
 #[derive(Debug, PartialEq, Eq, Clone)]
 pub struct OutputFile {
-    pub text: OutputFileData,
+    pub data: OutputFileData,
     pub path: PathBuf,
 }
 
@@ -310,7 +310,7 @@ pub mod test {
                 .map(|(path, file)| {
                     Ok(OutputFile {
                         path,
-                        text: OutputFileData::Text(
+                        data: OutputFileData::Text(
                             String::from_utf8(file.into_contents()?).map_err(|_| ())?,
                         ),
                     })
