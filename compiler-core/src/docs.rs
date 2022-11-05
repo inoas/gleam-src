@@ -291,6 +291,15 @@ pub fn generate_html(
     });
 
     files.push(OutputFile {
+        path: PathBuf::from("search-data.js"),
+        text: OutputFileData::Text(format!(
+            "window.Gleam.initSearch({});",
+            serde_to_string(&escape_html_contents(search_indexes))
+                .expect("search index serialization")
+        )),
+    });
+
+    files.push(OutputFile {
         path: PathBuf::from("js/index.js"),
         text: OutputFileData::Text(std::include_str!("../templates/docs-js/index.js").to_string()),
     });
@@ -316,15 +325,6 @@ pub fn generate_html(
             include_bytes!("../templates/docs-fonts/ubuntu-mono-v15-latin-ext_latin-regular.woff2")
                 .to_vec(),
         ),
-    });
-
-    files.push(OutputFile {
-        path: PathBuf::from("search-data.js"),
-        text: OutputFileData::Text(format!(
-            "window.Gleam.initSearch({});",
-            serde_to_string(&escape_html_contents(search_indexes))
-                .expect("search index serialization")
-        )),
     });
 
     files
