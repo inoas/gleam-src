@@ -4,7 +4,7 @@
   font-style: normal;
   font-weight: 400;
   font-display: swap;
-  src: local('Karla', 'Karla-Regular', 'KarlaRegular'),
+  src: local('Karla', 'Karla Regular', 'Karla-Regular', 'KarlaRegular', 'Karla_Regular'),
     url('../fonts/karla-v23-latin-ext_latin-regular.woff2') format('woff2'); // Chrome 26+, Opera 23+, Firefox 39+, Edge 14+
 }
 
@@ -14,7 +14,7 @@
   font-style: normal;
   font-weight: 700;
   font-display: swap;
-  src: local(''),
+  src: local('Karla-700', 'Karla Bold', 'Karla-Bold', 'KarlaBold', 'Karla_Bold'),
     url('../fonts/karla-v23-latin-ext_latin-700.woff2') format('woff2'); // Chrome 26+, Opera 23+, Firefox 39+, Edge 14+
 }
 
@@ -24,7 +24,7 @@
   font-style: normal;
   font-weight: 400;
   font-display: swap;
-  src: local('Ubuntu Mono', 'Ubuntu-Mono', 'UbuntuMono'),
+  src: local('Ubuntu Mono', 'Ubuntu-Mono', 'UbuntuMono', 'Ubuntu_Mono'),
     url('../fonts/ubuntu-mono-v15-latin-ext_latin-regular.woff2') format('woff2'); // Chrome 26+, Opera 23+, Firefox 39+, Edge 14+
 }
 
