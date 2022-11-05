@@ -7,6 +7,8 @@ use gleam_core::{
 
 use crate::{cli, dependencies::UseManifest, fs};
 
+use gleam_core::io::OutputFileData;
+
 pub fn command(packages: Vec<String>, dev: bool) -> Result<()> {
     // Insert the new packages into the manifest and perform dependency
     // resolution to determine suitable versions
@@ -53,7 +55,10 @@ pub fn command(packages: Vec<String>, dev: bool) -> Result<()> {
     }
 
     // Write the updated config
-    fs::write(Path::new("gleam.toml"), &toml.to_string())?;
+    fs::write(
+        Path::new("gleam.toml"),
+        &OutputFileData::Text(toml.to_string()),
+    )?;
 
     Ok(())
 }

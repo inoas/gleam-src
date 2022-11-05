@@ -1,8 +1,8 @@
 use gleam_core::{
     error::{Error, FileIoAction, FileKind},
     io::{
-        CommandExecutor, DirEntry, FileSystemIO, FileSystemWriter, OutputFile, ReadDir,
-        WrappedReader, WrappedWriter,
+        CommandExecutor, DirEntry, FileSystemIO, FileSystemWriter, OutputFile, OutputFileData,
+        ReadDir, WrappedReader, WrappedWriter,
     },
     Result,
 };
@@ -214,8 +214,8 @@ pub fn write_output(file: &OutputFile) -> Result<(), Error> {
     write(path, text)
 }
 
-pub fn write(path: &Path, text: &str) -> Result<(), Error> {
-    write_bytes(path, text.as_bytes())
+pub fn write(path: &Path, text: &OutputFileData) -> Result<(), Error> {
+    write_bytes(path, &text.vecu8ify())
 }
 
 #[cfg(target_family = "unix")]
@@ -401,10 +401,10 @@ pub fn create_tar_archive(outputs: Vec<OutputFile>) -> Result<Vec<u8>, Error> {
             path: file.path.clone(),
             err: e.to_string(),
         })?;
-        header.set_size(file.text.as_bytes().len() as u64);
+        header.set_size(file.text.vecu8ify().as_slice().len() as u64);
         header.set_cksum();
         builder
-            .append(&header, file.text.as_bytes())
+            .append(&header, file.text.vecu8ify().as_slice())
             .map_err(|e| Error::AddTar {
                 path: file.path.clone(),
                 err: e.to_string(),

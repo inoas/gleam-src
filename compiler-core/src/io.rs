@@ -51,8 +51,29 @@ pub trait Writer: std::io::Write + Utf8Writer {
 }
 
 #[derive(Debug, PartialEq, Eq, Clone)]
+pub enum OutputFileData {
+    Binary(Vec<u8>),
+    Text(String),
+}
+
+impl OutputFileData {
+    // pub fn stringify(&self) -> String {
+    //     match self {
+    //         OutputFileData::Binary(data) => String::from_utf8(data.clone()).unwrap(),
+    //         OutputFileData::Text(data) => data.clone(),
+    //     }
+    // }
+    pub fn vecu8ify(&self) -> Vec<u8> {
+        match self {
+            OutputFileData::Binary(data) => data.clone(),
+            OutputFileData::Text(data) => data.clone().as_bytes().to_vec(),
+        }
+    }
+}
+
+#[derive(Debug, PartialEq, Eq, Clone)]
 pub struct OutputFile {
-    pub text: String,
+    pub text: OutputFileData,
     pub path: PathBuf,
 }
 
@@ -275,7 +296,9 @@ pub mod test {
                 .map(|(path, file)| {
                     Ok(OutputFile {
                         path,
-                        text: String::from_utf8(file.into_contents()?).map_err(|_| ())?,
+                        text: OutputFileData::Text(
+                            String::from_utf8(file.into_contents()?).map_err(|_| ())?,
+                        ),
                     })
                 })
                 .collect()

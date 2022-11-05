@@ -1,4 +1,32 @@
-@import url("https://fonts.googleapis.com/css2?family=Karla:wght@400;700&family=Ubuntu+Mono&display=swap");
+/* karla-regular - latin-ext_latin */
+@font-face {
+  font-family: 'Karla';
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: local(''),
+    url('../fonts/karla-v23-latin-ext_latin-regular.woff2') format('woff2'); // Chrome 26+, Opera 23+, Firefox 39+, Edge 14+
+}
+
+/* karla-700 - latin-ext_latin */
+@font-face {
+  font-family: 'Karla';
+  font-style: normal;
+  font-weight: 700;
+  font-display: swap;
+  src: local(''),
+    url('../fonts/karla-v23-latin-ext_latin-700.woff2') format('woff2'); // Chrome 26+, Opera 23+, Firefox 39+, Edge 14+
+}
+
+/* ubuntu-mono-regular - latin-ext_latin */
+@font-face {
+  font-family: 'Ubuntu Mono';
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: local(''),
+    url('../fonts/ubuntu-mono-v15-latin-ext_latin-regular.woff2') format('woff2'); // Chrome 26+, Opera 23+, Firefox 39+, Edge 14+
+}
 
 :root {
   /* Colours */

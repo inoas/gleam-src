@@ -24,6 +24,8 @@ use crate::{
     http::HttpClient,
 };
 
+use gleam_core::io::OutputFileData;
+
 pub fn list() -> Result<()> {
     let runtime = tokio::runtime::Runtime::new().expect("Unable to start Tokio async runtime");
 
@@ -285,9 +287,10 @@ impl LocalPackages {
     }
 
     pub fn write_to_disc(&self) -> Result<()> {
-        let path = paths::packages_toml();
-        let toml = toml::to_string(&self).expect("packages.toml serialization");
-        fs::write(&path, &toml)
+        fs::write(
+            &paths::packages_toml(),
+            &OutputFileData::Text(toml::to_string(&self).expect("packages.toml serialization")),
+        )
     }
 
     pub fn from_manifest(manifest: &Manifest) -> Self {
