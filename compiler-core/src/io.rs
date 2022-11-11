@@ -57,12 +57,6 @@ pub enum OutputFileData {
 }
 
 impl OutputFileData {
-    // pub fn stringify(&self) -> String {
-    //     match self {
-    //         OutputFileData::Binary(data) => String::from_utf8(data.clone()).unwrap(),
-    //         OutputFileData::Text(data) => data.clone(),
-    //     }
-    // }
     pub fn vecu8ify(&self) -> Vec<u8> {
         match self {
             OutputFileData::Binary(data) => data.clone(),
