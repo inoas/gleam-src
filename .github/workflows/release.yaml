@@ -22,10 +22,10 @@ jobs:
           - x86_64-pc-windows-msvc
         toolchain: [stable]
         include:
-          - os: ubuntu-latest
+          - os: ubuntu-22.04
             target: x86_64-unknown-linux-musl
             use-cross: true
-          - os: ubuntu-latest
+          - os: ubuntu-22.04
             target: aarch64-unknown-linux-musl
             use-cross: true
           - os: macos-latest

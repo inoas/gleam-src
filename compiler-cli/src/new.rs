@@ -151,7 +151,7 @@ on:
 
 jobs:
   test:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-22.04
     steps:
       - uses: actions/checkout@v3.0.0
       - uses: erlef/setup-beam@v1.13.0
