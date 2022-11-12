@@ -70,7 +70,8 @@ pub(crate) fn erlang_shipment() -> Result<()> {
                 .replace("$PROJECT_NAME_FROM_GLEAM", &package.config.name),
         ),
     };
-    let OutputFile { path, data } = entrypoint_output_file;
+    let path = entrypoint_output_file.path;
+    let data = entrypoint_output_file.data;
 
     crate::fs::write(&path, &data)?;
     crate::fs::make_executable(&path)?;

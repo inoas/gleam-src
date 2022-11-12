@@ -60,7 +60,7 @@ impl OutputFileData {
     pub fn vecu8ify(&self) -> Vec<u8> {
         match self {
             OutputFileData::Binary(data) => data.clone(),
-            OutputFileData::Text(data) => data.clone().as_bytes().to_vec(),
+            OutputFileData::Text(data) => data.as_bytes().to_vec(),
         }
     }
 }
