@@ -209,7 +209,7 @@ pub fn write_output(file: &OutputFile) -> Result<(), Error> {
 }
 
 pub fn write(path: &Path, data: &OutputFileData) -> Result<(), Error> {
-    write_bytes(path, &data.vecu8ify())
+    write_bytes(path, data.to_bytes())
 }
 
 #[cfg(target_family = "unix")]
@@ -395,10 +395,10 @@ pub fn create_tar_archive(outputs: Vec<OutputFile>) -> Result<Vec<u8>, Error> {
             path: file.path.clone(),
             err: e.to_string(),
         })?;
-        header.set_size(file.data.vecu8ify().as_slice().len() as u64);
+        header.set_size(file.data.to_bytes().len() as u64);
         header.set_cksum();
         builder
-            .append(&header, file.data.vecu8ify().as_slice())
+            .append(&header, file.data.to_bytes())
             .map_err(|e| Error::AddTar {
                 path: file.path.clone(),
                 err: e.to_string(),

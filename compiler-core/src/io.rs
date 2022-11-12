@@ -57,10 +57,10 @@ pub enum OutputFileData {
 }
 
 impl OutputFileData {
-    pub fn vecu8ify(&self) -> Vec<u8> {
+    pub fn to_bytes(&self) -> &[u8] {
         match self {
-            OutputFileData::Binary(data) => data.clone(),
-            OutputFileData::Text(data) => data.as_bytes().to_vec(),
+            OutputFileData::Binary(data) => data,
+            OutputFileData::Text(data) => data.as_bytes(),
         }
     }
 }

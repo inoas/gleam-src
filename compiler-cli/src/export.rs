@@ -3,7 +3,6 @@ use gleam_core::{
     paths, Result,
 };
 
-use gleam_core::io::OutputFile;
 use gleam_core::io::OutputFileData;
 
 // TODO: start in embedded mode
@@ -63,15 +62,11 @@ pub(crate) fn erlang_shipment() -> Result<()> {
     }
 
     // Write entrypoint script
-    let entrypoint_output_file = OutputFile {
-        path: out.join("entrypoint.sh"),
-        data: OutputFileData::Text(
-            include_str!("../templates/erlang-shipment-entrypoint.sh")
-                .replace("$PROJECT_NAME_FROM_GLEAM", &package.config.name),
-        ),
-    };
-    let path = entrypoint_output_file.path;
-    let data = entrypoint_output_file.data;
+    let path = out.join("entrypoint.sh");
+    let data = OutputFileData::Text(
+        include_str!("../templates/erlang-shipment-entrypoint.sh")
+            .replace("$PROJECT_NAME_FROM_GLEAM", &package.config.name),
+    );
 
     crate::fs::write(&path, &data)?;
     crate::fs::make_executable(&path)?;
