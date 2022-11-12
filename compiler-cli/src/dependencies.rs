@@ -287,10 +287,10 @@ impl LocalPackages {
     }
 
     pub fn write_to_disc(&self) -> Result<()> {
-        fs::write(
-            &paths::packages_toml(),
-            &OutputFileData::Text(toml::to_string(&self).expect("packages.toml serialization")),
-        )
+        let path = &paths::packages_toml();
+        let data =
+            &OutputFileData::Text(toml::to_string(&self).expect("packages.toml serialization"));
+        fs::write(path, data)
     }
 
     pub fn from_manifest(manifest: &Manifest) -> Self {

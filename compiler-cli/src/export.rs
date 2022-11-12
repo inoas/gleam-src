@@ -67,7 +67,6 @@ pub(crate) fn erlang_shipment() -> Result<()> {
         include_str!("../templates/erlang-shipment-entrypoint.sh")
             .replace("$PROJECT_NAME_FROM_GLEAM", &package.config.name),
     );
-
     crate::fs::write(&path, &data)?;
     crate::fs::make_executable(&path)?;
 
