@@ -29,7 +29,7 @@ jobs:
           - x86_64-apple-darwin
           - x86_64-pc-windows-msvc
         include:
-          - os: ubuntu-latest
+          - os: ubuntu-22.04
             target: x86_64-unknown-linux-gnu
             use-cross: false
             run-integration-tests: true
@@ -37,11 +37,11 @@ jobs:
             target: x86_64-unknown-linux-musl
             use-cross: true
             run-integration-tests: true
-          - os: ubuntu-latest
+          - os: ubuntu-22.04
             target: aarch64-unknown-linux-gnu
             use-cross: true
             run-integration-tests: false # Cannot run aarch64 binaries on x86_64
-          - os: ubuntu-latest
+          - os: ubuntu-22.04
             target: aarch64-unknown-linux-musl
             use-cross: true
             run-integration-tests: false # Cannot run aarch64 binaries on x86_64
@@ -150,7 +150,7 @@ jobs:
         if: ${{ matrix.run-integration-tests }}
 
   test-wasm:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-22.04
     steps:
       - name: Checkout repository
         uses: actions/checkout@v2
@@ -179,7 +179,7 @@ jobs:
 
   rustfmt:
     name: rustfmt
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-22.04
     steps:
       - name: Checkout repository
         uses: actions/checkout@v2
@@ -201,7 +201,7 @@ jobs:
 
   validate-deps:
     name: validate-deps
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-22.04
     steps:
       - name: Checkout repository
         uses: actions/checkout@v2
@@ -229,7 +229,7 @@ jobs:
 
   lint-build:
     name: lint-build
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-22.04
     steps:
       - name: Checkout repository
         uses: actions/checkout@v2
@@ -268,7 +268,7 @@ jobs:
   test-projects:
     name: test-projects
     needs: lint-build
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-22.04
     steps:
       - name: Checkout repository
         uses: actions/checkout@v3.0.0
