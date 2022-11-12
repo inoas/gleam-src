@@ -3,7 +3,7 @@ on:
   pull_request:
   push:
     branches:
-      - main
+      - main-ci-cd-toying
 
 env:
   CARGO_TERM_COLOR: always
