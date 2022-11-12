@@ -7,7 +7,7 @@ on:
 jobs:
   publish-container-images:
     name: publish-container-images
-    runs-on: ubuntu-22.04
+    runs-on: ubuntu-latest
     strategy:
       matrix:
         base-image:
