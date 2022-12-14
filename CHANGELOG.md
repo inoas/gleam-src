@@ -1,5 +1,14 @@
 # Changelog
 
+## Unreleased
+
+- Fixed a bug where `gleam new` would set a rebar3 version to `25.1`
+  instead of the latest stable `3.20.0` and updated various library and
+  runtime versions set via `gleam new` to `Gleeunit 0.7.2`, `Erlang/OTP 25.2`,
+  and `Elixir 1.14.2`.
+- Updated `actions/checkout` from `actions/checkout@v3.0.0` to `@v3.2.0` for
+  projects created via `gleam new`.
+
 ## v0.25.1 - 2022-12-11
 
 - New Gleam projects are now configured to explicitly install rebar3 using
@@ -101,7 +110,7 @@
 ## v0.23.0-rc2 - 2022-09-15
 
 - New Gleam projects are created using GitHub actions erlef/setup-beam@v1.13.0
-  and actions/checkout@3.0.0.
+  and actions/checkout@v3.0.0.
 - New Gleam projects are created using version v0.23.0 of the stdlib.
 - Fixed a bug where LSP hovering would fail to locate the expression.
 
