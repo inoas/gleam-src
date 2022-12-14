@@ -55,10 +55,10 @@ jobs:
             run-integration-tests: false # https://github.com/erlef/setup-beam/issues/147
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v2
+        uses: actions/checkout@v3.2.0
 
       - name: Install musl-tools incl. musl-gcc
-        uses: awalsh128/cache-apt-pkgs-action@v1
+        uses: awalsh128/cache-apt-pkgs-action@v1.2.1
         with:
           # musl-tools provide `musl-gcc` which is required for `ring` which is required for `rustls` et al.
           packages: musl-tools
@@ -66,7 +66,7 @@ jobs:
         if: ${{ matrix.target == 'x86_64-unknown-linux-musl'}}
 
       - name: Install Rust toolchain
-        uses: actions-rs/toolchain@v1
+        uses: actions-rs/toolchain@v1.0.6
         with:
           toolchain: ${{ matrix.toolchain }}
           target: ${{ matrix.target }}
@@ -77,9 +77,9 @@ jobs:
       - name: Install Erlang (non-macos)
         uses: erlef/setup-beam@v1.15.0
         with:
-          otp-version: "25.1"
-          elixir-version: "1.14.1"
-          rebar3-version: "3"
+          otp-version: "25.2"
+          elixir-version: "1.14.2"
+          rebar3-version: "3.2"
         if: ${{ matrix.os != 'macos-latest' }} # setup-beam does not support macOS
 
       - name: Install Erlang (macos)
@@ -89,12 +89,12 @@ jobs:
         if: ${{ matrix.os == 'macos-latest' }} # setup-beam does not support macOS
 
       - name: Handle Rust dependencies caching
-        uses: Swatinem/rust-cache@v1
+        uses: Swatinem/rust-cache@v2.2.0
         with:
           key: v1-${{ matrix.target }}
 
       - name: Install Gleam
-        uses: actions-rs/cargo@v1
+        uses: actions-rs/cargo@v1.0.1
         with:
           command: install
           args: "--path compiler-cli --target ${{ matrix.target }} --debug --locked"
@@ -102,7 +102,7 @@ jobs:
         if: ${{ matrix.run-integration-tests }}
 
       - name: Run tests
-        uses: actions-rs/cargo@v1
+        uses: actions-rs/cargo@v1.0.1
         with:
           command: test
           args: "--workspace --target ${{ matrix.target }}"
@@ -162,17 +162,17 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v2
+        uses: actions/checkout@v3.2.0
 
       - name: Install Rust toolchain
-        uses: actions-rs/toolchain@v1
+        uses: actions-rs/toolchain@v1.0.6
         with:
           toolchain: stable
           target: wasm32-unknown-unknown
           profile: minimal
           override: true
 
-      - uses: actions/setup-node@v2
+      - uses: actions/setup-node@v3.5.1
         with:
           node-version: "16"
 
@@ -191,10 +191,10 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v2
+        uses: actions/checkout@v3.2.0
 
       - name: Install Rust toolchain
-        uses: actions-rs/toolchain@v1
+        uses: actions-rs/toolchain@v1.0.6
         with:
           toolchain: stable
           override: true
@@ -203,7 +203,7 @@ jobs:
           components: rustfmt
 
       - name: Check formatting
-        uses: actions-rs/cargo@v1
+        uses: actions-rs/cargo@v1.0.1
         with:
           command: fmt
           args: --all -- --check
@@ -213,10 +213,10 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v2
+        uses: actions/checkout@v3.2.0
 
       - name: Install Rust toolchain
-        uses: actions-rs/toolchain@v1
+        uses: actions-rs/toolchain@v1.0.6
         with:
           toolchain: stable
           override: true
@@ -231,7 +231,7 @@ jobs:
           echo `pwd` >> $GITHUB_PATH
 
       - name: Validate deps
-        uses: actions-rs/cargo@v1
+        uses: actions-rs/cargo@v1.0.1
         with:
           command: deny
           args: check
@@ -241,10 +241,10 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v2
+        uses: actions/checkout@v3.2.0
 
       - name: Install Rust toolchain
-        uses: actions-rs/toolchain@v1
+        uses: actions-rs/toolchain@v1.0.6
         with:
           toolchain: stable
           override: true
@@ -253,23 +253,23 @@ jobs:
           components: clippy
 
       - name: Handle Rust dependencies caching
-        uses: Swatinem/rust-cache@v1
+        uses: Swatinem/rust-cache@v2.2.0
         with:
           key: v1-linux-gnu
 
       - name: Run linter
-        uses: actions-rs/cargo@v1
+        uses: actions-rs/cargo@v1.0.1
         with:
           command: clippy
           args: --workspace
 
       - name: Build binary
-        uses: actions-rs/cargo@v1
+        uses: actions-rs/cargo@v1.0.1
         with:
           command: build
 
       - name: Upload artifact (Ubuntu)
-        uses: actions/upload-artifact@v2
+        uses: actions/upload-artifact@v3.1.1
         with:
           name: gleam
           path: target/debug/gleam
@@ -280,17 +280,17 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v3.0.0
+        uses: actions/checkout@v3.2.0
 
       - name: Install Erlang
         uses: erlef/setup-beam@v1.15.0
         with:
-          otp-version: "25.1"
-          elixir-version: "1.14.1"
-          rebar3-version: "3"
+          otp-version: "25.2"
+          elixir-version: "1.14.2"
+          rebar3-version: "3.2"
 
       - name: Download Gleam binary from previous job
-        uses: actions/download-artifact@v2
+        uses: actions/download-artifact@v3.0.1
         with:
           name: gleam
           path: ./test

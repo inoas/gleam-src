@@ -39,10 +39,10 @@ jobs:
             use-cross: false
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v2
+        uses: actions/checkout@v3.2.0
 
       - name: Install Rust toolchain
-        uses: actions-rs/toolchain@v1
+        uses: actions-rs/toolchain@v1.0.6
         with:
           toolchain: ${{ matrix.toolchain }}
           target: ${{ matrix.target }}
@@ -51,12 +51,12 @@ jobs:
           profile: minimal
 
       - name: Handle Rust dependencies caching
-        uses: Swatinem/rust-cache@v1
+        uses: Swatinem/rust-cache@v2.0.0
         with:
           key: v1-${{ matrix.target }}
 
       - name: Build release binary
-        uses: actions-rs/cargo@v1
+        uses: actions-rs/cargo@v1.0.1
         with:
           command: build
           args: --release --target ${{ matrix.target }}
