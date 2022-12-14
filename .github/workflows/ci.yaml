@@ -3,7 +3,7 @@ on:
   pull_request:
   push:
     branches:
-      - main
+      - main_cicd
 
 env:
   CARGO_TERM_COLOR: always
