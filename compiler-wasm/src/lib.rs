@@ -1,7 +1,7 @@
 use std::{collections::HashMap, ffi::OsStr, path::Path};
 
 use gleam_core::{
-    build::{Mode, Options, Package, ProjectCompiler, Target},
+    build::{Codegen, Mode, Options, Package, ProjectCompiler, Target},
     config::PackageConfig,
     io::{FileSystemReader, FileSystemWriter},
     manifest::{Base16Checksum, ManifestPackage, ManifestPackageSource},
@@ -72,7 +72,7 @@ fn manifest_from_name(name: &str) -> ManifestPackage {
             pre: vec![],
             build: None,
         },
-        build_tools: vec!["gleam".to_string()],
+        build_tools: vec!["gleam".into()],
         otp_app: None,
         requirements: vec![],
         source: ManifestPackageSource::Hex {
@@ -95,13 +95,13 @@ fn compile_project(
     let options = Options {
         mode: Mode::Dev,
         target: Some(target),
-        perform_codegen: true,
+        codegen: Codegen::All,
     };
 
     let mut pcompiler = ProjectCompiler::new(
         PackageConfig {
             target,
-            name: PROJECT_NAME.to_string(),
+            name: PROJECT_NAME.into(),
             ..Default::default()
         },
         options,
@@ -175,7 +175,7 @@ mod test {
 
     fn source(source: &str) -> HashMap<String, String> {
         let mut source_files = HashMap::new();
-        source_files.insert("./src/main.gleam".to_string(), source.to_string());
+        source_files.insert("./src/main.gleam".into(), source.to_string());
         source_files
     }
 
@@ -199,7 +199,7 @@ mod test {
         );
 
         source_files.insert(
-            "build/packages/some_library/src/some_library.gleam".to_string(),
+            "build/packages/some_library/src/some_library.gleam".into(),
             r#"
             pub fn function(string: String) -> Nil {
                 Nil
@@ -209,8 +209,8 @@ mod test {
         );
 
         source_files.insert(
-            "build/packages/some_library/gleam.toml".to_string(),
-            "name = \"some_library\"".to_string(),
+            "build/packages/some_library/gleam.toml".into(),
+            "name = \"some_library\"".into(),
         );
 
         let result = compile_wrapper(CompileOptions {
@@ -239,7 +239,7 @@ mod test {
         );
 
         source_files.insert(
-            "build/packages/some_library/src/some_library.gleam".to_string(),
+            "build/packages/some_library/src/some_library.gleam".into(),
             r#"
             pub fn function(string: String) -> Nil {
                 Nil
@@ -249,8 +249,8 @@ mod test {
         );
 
         source_files.insert(
-            "build/packages/some_library/gleam.toml".to_string(),
-            "name = \"some_library\"".to_string(),
+            "build/packages/some_library/gleam.toml".into(),
+            "name = \"some_library\"".into(),
         );
 
         let result = compile_wrapper(CompileOptions {
@@ -263,7 +263,7 @@ mod test {
 
         assert_eq!(
             result.get("build/dev/erlang/gleam-wasm/_gleam_artefacts/main.erl"),
-            Some(&String::from("-module(main).\n-compile(no_auto_import).\n\n-export([main/0]).\n\n-spec main() -> nil.\nmain() ->\n    some_library:function(<<\"Hello, world!\"/utf8>>).\n"))
+            Some(&String::from("-module(main).\n-compile([no_auto_import, nowarn_unused_vars]).\n\n-export([main/0]).\n\n-spec main() -> nil.\nmain() ->\n    some_library:function(<<\"Hello, world!\"/utf8>>).\n"))
         );
     }
 }

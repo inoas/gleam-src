@@ -1082,7 +1082,7 @@ fn duplicate_custom_type_names() {
 fn duplicate_const_names() {
     // We cannot declare two const with the same name in a module
     assert_module_error!(
-        "const duplicate = 1;
+        "const duplicate = 1
 pub const duplicate = 1"
     );
 }
@@ -1189,10 +1189,10 @@ fn wrong_type_update() {
         "
  pub type Person {
    Person(name: String, age: Int)
- };
+ }
  pub type Box(a) {
    Box(a)
- };
+ }
  pub fn update_person(person: Person, box: Box(a)) {
    Person(..box)
  }"
@@ -1206,7 +1206,7 @@ fn unknown_variable_update() {
         "
 pub type Person {
   Person(name: String, age: Int)
-};
+}
 pub fn update_person() {
   Person(..person)
 }"
@@ -1220,7 +1220,7 @@ fn unknown_field_update() {
         "
  pub type Person {
    Person(name: String)
- };
+ }
  pub fn update_person(person: Person) {
    Person(..person, one: 5)
  }"
@@ -1234,7 +1234,7 @@ fn unknown_field_update2() {
         "
  pub type Person {
    Person(name: String, age: Int, size: Int)
- };
+ }
  pub fn update_person(person: Person) {
    Person(..person, size: 66, one: 5, age: 3)
  }"
@@ -1248,7 +1248,7 @@ fn unknown_constructor_update() {
         "
 pub type Person {
    Person(name: String, age: Int)
-};
+}
 pub fn update_person(person: Person) {
    NotAPerson(..person)
 }"
@@ -1262,7 +1262,7 @@ fn not_a_constructor_update() {
         "
 pub type Person {
   Person(name: String, age: Int)
-};
+}
 pub fn identity(a) { a }
 pub fn update_person(person: Person) {
   identity(..person)
@@ -1277,7 +1277,7 @@ fn expression_constructor_update() {
         "
 pub type Person {
   Person(name: String, age: Int)
-};
+}
 pub fn update_person(person: Person) {
   let constructor = Person
   constructor(..person)
@@ -1292,10 +1292,10 @@ fn generic_record_update1() {
         "
 pub type Box(a) {
   Box(value: a, i: Int)
-};
+}
 pub fn update_box(box: Box(Int), value: String) {
   Box(..box, value: value)
-};"
+}"
     );
 }
 
@@ -1306,10 +1306,10 @@ fn generic_record_update2() {
         "
 pub type Box(a) {
   Box(value: a, i: Int)
-};
+}
 pub fn update_box(box: Box(a), value: b) {
   Box(..box, value: value)
-};"
+}"
     );
 }
 
@@ -1317,7 +1317,7 @@ pub fn update_box(box: Box(a), value: b) {
 fn type_vars_must_be_declared() {
     // https://github.com/gleam-lang/gleam/issues/734
     assert_module_error!(
-        r#"type A(a) { A };
+        r#"type A(a) { A }
 type B = a"#
     );
 }
@@ -1325,7 +1325,7 @@ type B = a"#
 #[test]
 fn type_holes1() {
     // Type holes cannot be used when decaring types or external functions
-    assert_module_error!(r#"type A { A(_) };"#);
+    assert_module_error!(r#"type A { A(_) }"#);
 }
 
 #[test]
@@ -1554,10 +1554,10 @@ fn negate_string() {
 #[test]
 fn ambiguous_type_error() {
     assert_with_module_error!(
-        (vec!["foo".to_string()], "pub type Thing { Thing }"),
-        "import foo; pub type Thing { Thing }; 
-        pub fn main() { 
-            [Thing] == [foo.Thing]; 
+        ("foo", "pub type Thing { Thing }"),
+        "import foo pub type Thing { Thing }
+        pub fn main() {
+            [Thing] == [foo.Thing]
         }",
     );
 }
@@ -1565,14 +1565,8 @@ fn ambiguous_type_error() {
 #[test]
 fn ambiguous_import_error_no_unqualified() {
     assert_with_module_error!(
-        (
-            vec!["foo".to_string(), "sub".to_string()],
-            "pub fn bar() { 1 }"
-        ),
-        (
-            vec!["foo2".to_string(), "sub".to_string()],
-            "pub fn bar() { 1 }"
-        ),
+        ("foo/sub", "pub fn bar() { 1 }"),
+        ("foo2/sub", "pub fn bar() { 1 }"),
         "
         import foo/sub
         import foo2/sub
@@ -1586,14 +1580,8 @@ fn ambiguous_import_error_no_unqualified() {
 #[test]
 fn ambiguous_import_error_with_unqualified() {
     assert_with_module_error!(
-        (
-            vec!["foo".to_string(), "sub".to_string()],
-            "pub fn bar() { 1 }"
-        ),
-        (
-            vec!["foo2".to_string(), "sub".to_string()],
-            "pub fn bar() { 1 }"
-        ),
+        ("foo/sub", "pub fn bar() { 1 }"),
+        ("foo2/sub", "pub fn bar() { 1 }"),
         "
         import foo/sub
         import foo2/sub.{bar}
@@ -1608,7 +1596,7 @@ fn ambiguous_import_error_with_unqualified() {
 fn same_imports_multiple_times() {
     assert_with_module_error!(
         (
-            vec!["gleam".to_string(), "foo".to_string()],
+            "gleam/foo",
             "
             pub fn bar() { 1 }
             pub fn zoo() { 1 }
@@ -1626,13 +1614,13 @@ fn same_imports_multiple_times() {
 fn same_imports_multiple_times_1() {
     assert_with_module_error!(
         (
-            vec!["one".to_string(),],
+            "one",
             "
             pub fn fn1() { 1 }
             "
         ),
         (
-            vec!["two".to_string(),],
+            "two",
             "
             pub fn fn2() { 1 }
             "
@@ -1648,13 +1636,13 @@ fn same_imports_multiple_times_1() {
 fn same_imports_multiple_times_2() {
     assert_with_module_error!(
         (
-            vec!["one".to_string(),],
+            "one",
             "
             pub fn fn1() { 1 }
             "
         ),
         (
-            vec!["two".to_string(),],
+            "two",
             "
             pub fn fn2() { 1 }
             "
@@ -1670,13 +1658,13 @@ fn same_imports_multiple_times_2() {
 fn same_imports_multiple_times_3() {
     assert_with_module_error!(
         (
-            vec!["one".to_string(),],
+            "one",
             "
             pub fn fn1() { 1 }
             "
         ),
         (
-            vec!["two".to_string(),],
+            "two",
             "
             pub fn fn2() { 1 }
             "
@@ -1692,13 +1680,13 @@ fn same_imports_multiple_times_3() {
 fn same_imports_multiple_times_4() {
     assert_with_module_error!(
         (
-            vec!["one".to_string(),],
+            "one",
             "
             pub fn fn1() { 1 }
             "
         ),
         (
-            vec!["two".to_string(),],
+            "two",
             "
             pub fn fn2() { 1 }
             "
@@ -1714,13 +1702,13 @@ fn same_imports_multiple_times_4() {
 fn same_imports_multiple_times_5() {
     assert_with_module_error!(
         (
-            vec!["one".to_string(),],
+            "one",
             "
             pub fn fn1() { 1 }
             "
         ),
         (
-            vec!["two".to_string(),],
+            "two",
             "
             pub fn fn2() { 1 }
             "
@@ -1736,13 +1724,13 @@ fn same_imports_multiple_times_5() {
 fn same_imports_multiple_times_6() {
     assert_with_module_error!(
         (
-            vec!["one".to_string(),],
+            "one",
             "
             pub fn fn1() { 1 }
             "
         ),
         (
-            vec!["two".to_string(),],
+            "two",
             "
             pub fn fn2() { 1 }
             "
@@ -1807,11 +1795,33 @@ pub fn main(user: User) {
 #[test]
 fn unknown_imported_module_type() {
     assert_with_module_error!(
-        (vec!["one".to_string(), "two".to_string()], ""),
+        ("one/two", ""),
         "
 import one/two
 
 pub fn main(_x: two.Thing) {
+  Nil
+}
+"
+    );
+}
+
+#[test]
+fn duplicate_module_function_arguments() {
+    assert_module_error!(
+        "
+pub fn main(x, x) {
+  Nil
+}
+"
+    );
+}
+
+#[test]
+fn duplicate_anon_function_arguments() {
+    assert_error!(
+        "
+fn(x, x) {
   Nil
 }
 "

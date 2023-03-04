@@ -2,55 +2,64 @@
 mod tests;
 
 use crate::{
-    ast::{Use, *},
+    ast::{
+        CustomType, ExternalFunction, ExternalType, Function, Import, ModuleConstant, TypeAlias,
+        Use, *,
+    },
     docvec,
     io::Utf8Writer,
-    parse::extra::Comment,
+    parse::extra::{Comment, ModuleExtra},
     pretty::*,
     type_::{self, Type},
     Error, Result,
 };
 use itertools::Itertools;
+use smol_str::SmolStr;
 use std::{path::Path, sync::Arc};
 use vec1::Vec1;
 
 const INDENT: isize = 2;
 
-pub fn pretty(writer: &mut impl Utf8Writer, src: &str, path: &Path) -> Result<()> {
+pub fn pretty(writer: &mut impl Utf8Writer, src: &SmolStr, path: &Path) -> Result<()> {
     let (module, extra) = crate::parse::parse_module(src).map_err(|error| Error::Parse {
         path: path.to_path_buf(),
-        src: src.to_string(),
+        src: src.clone(),
         error,
     })?;
-    let intermediate = Intermediate {
-        comments: extra
-            .comments
-            .iter()
-            .map(|span| Comment::from((span, src)))
-            .collect(),
-        doc_comments: extra
-            .doc_comments
-            .iter()
-            .map(|span| Comment::from((span, src)))
-            .collect(),
-        empty_lines: &extra.empty_lines,
-        module_comments: extra
-            .module_comments
-            .iter()
-            .map(|span| Comment::from((span, src)))
-            .collect(),
-    };
-
+    let intermediate = Intermediate::from_extra(&extra, src);
     Formatter::with_comments(&intermediate)
         .module(&module)
         .pretty_print(80, writer)
 }
 
-struct Intermediate<'a> {
+pub(crate) struct Intermediate<'a> {
     comments: Vec<Comment<'a>>,
     doc_comments: Vec<Comment<'a>>,
     module_comments: Vec<Comment<'a>>,
     empty_lines: &'a [u32],
+}
+
+impl<'a> Intermediate<'a> {
+    pub fn from_extra(extra: &'a ModuleExtra, src: &'a SmolStr) -> Intermediate<'a> {
+        Intermediate {
+            comments: extra
+                .comments
+                .iter()
+                .map(|span| Comment::from((span, src)))
+                .collect(),
+            doc_comments: extra
+                .doc_comments
+                .iter()
+                .map(|span| Comment::from((span, src)))
+                .collect(),
+            empty_lines: &extra.empty_lines,
+            module_comments: extra
+                .module_comments
+                .iter()
+                .map(|span| Comment::from((span, src)))
+                .collect(),
+        }
+    }
 }
 
 /// Hayleigh's bane
@@ -67,7 +76,7 @@ impl<'comments> Formatter<'comments> {
         Default::default()
     }
 
-    fn with_comments(extra: &'comments Intermediate<'comments>) -> Self {
+    pub(crate) fn with_comments(extra: &'comments Intermediate<'comments>) -> Self {
         Self {
             comments: &extra.comments,
             doc_comments: &extra.doc_comments,
@@ -123,7 +132,7 @@ impl<'comments> Formatter<'comments> {
         for statement in target_group.statements_ref() {
             let start = statement.location().start;
             match statement {
-                Statement::Import { .. } => {
+                Statement::Import(Import { .. }) => {
                     has_imports = true;
                     let comments = self.pop_comments(start);
                     let statement = self.statement(statement);
@@ -161,7 +170,7 @@ impl<'comments> Formatter<'comments> {
         }
     }
 
-    fn module<'a>(&mut self, module: &'a UntypedModule) -> Document<'a> {
+    pub(crate) fn module<'a>(&mut self, module: &'a UntypedModule) -> Document<'a> {
         let groups = join(
             module.statements.iter().map(|t| self.target_group(t)),
             lines(2),
@@ -204,7 +213,7 @@ impl<'comments> Formatter<'comments> {
 
     fn statement<'a>(&mut self, statement: &'a UntypedStatement) -> Document<'a> {
         match statement {
-            Statement::Fn {
+            Statement::Function(Function {
                 name,
                 arguments: args,
                 body,
@@ -212,17 +221,17 @@ impl<'comments> Formatter<'comments> {
                 return_annotation,
                 end_position,
                 ..
-            } => self.statement_fn(public, name, args, return_annotation, body, *end_position),
+            }) => self.statement_fn(public, name, args, return_annotation, body, *end_position),
 
-            Statement::TypeAlias {
+            Statement::TypeAlias(TypeAlias {
                 alias,
                 parameters: args,
                 type_ast: resolved_type,
                 public,
                 ..
-            } => self.type_alias(*public, alias, args, resolved_type),
+            }) => self.type_alias(*public, alias, args, resolved_type),
 
-            Statement::CustomType {
+            Statement::CustomType(CustomType {
                 name,
                 parameters,
                 public,
@@ -230,9 +239,9 @@ impl<'comments> Formatter<'comments> {
                 location,
                 opaque,
                 ..
-            } => self.custom_type(*public, *opaque, name, parameters, constructors, location),
+            }) => self.custom_type(*public, *opaque, name, parameters, constructors, location),
 
-            Statement::ExternalFn {
+            Statement::ExternalFunction(ExternalFunction {
                 public,
                 arguments: args,
                 name,
@@ -240,7 +249,7 @@ impl<'comments> Formatter<'comments> {
                 module,
                 fun,
                 ..
-            } => self
+            }) => self
                 .external_fn_signature(*public, name, args, retrn)
                 .append(" =")
                 .append(line())
@@ -250,21 +259,21 @@ impl<'comments> Formatter<'comments> {
                 .append(fun.as_str())
                 .append("\""),
 
-            Statement::ExternalType {
+            Statement::ExternalType(ExternalType {
                 public,
                 name,
                 arguments: args,
                 ..
-            } => self.external_type(*public, name, args),
+            }) => self.external_type(*public, name, args),
 
-            Statement::Import {
+            Statement::Import(Import {
                 module,
                 as_name,
                 unqualified,
                 ..
-            } => "import "
+            }) => "import "
                 .to_doc()
-                .append(Document::String(module.join("/")))
+                .append(module.as_str())
                 .append(if unqualified.is_empty() {
                     nil()
                 } else {
@@ -288,13 +297,13 @@ impl<'comments> Formatter<'comments> {
                     nil()
                 }),
 
-            Statement::ModuleConstant {
+            Statement::ModuleConstant(ModuleConstant {
                 public,
                 name,
                 annotation,
                 value,
                 ..
-            } => {
+            }) => {
                 let head = pub_(*public).append("const ").append(name.as_str());
                 let head = match annotation {
                     None => head,
@@ -307,7 +316,9 @@ impl<'comments> Formatter<'comments> {
 
     fn const_expr<'a, A, B>(&mut self, value: &'a Constant<A, B>) -> Document<'a> {
         match value {
-            Constant::Int { value, .. } | Constant::Float { value, .. } => value.to_doc(),
+            Constant::Int { value, .. } => self.int(value),
+
+            Constant::Float { value, .. } => self.float(value),
 
             Constant::String { value, .. } => self.string(value),
 
@@ -433,7 +444,7 @@ impl<'comments> Formatter<'comments> {
 
     fn type_ast_constructor<'a>(
         &mut self,
-        module: &'a Option<String>,
+        module: &'a Option<SmolStr>,
         name: &'a str,
         args: &'a [TypeAst],
     ) -> Document<'a> {
@@ -486,7 +497,7 @@ impl<'comments> Formatter<'comments> {
         &mut self,
         public: bool,
         name: &'a str,
-        args: &'a [String],
+        args: &'a [SmolStr],
         typ: &'a TypeAst,
     ) -> Document<'a> {
         let head = pub_(public).append("type ").append(name);
@@ -622,7 +633,9 @@ impl<'comments> Formatter<'comments> {
 
         let keyword = match kind {
             Some(AssignmentKind::Let) => "let ",
-            Some(AssignmentKind::Assert) => "assert ",
+            Some(AssignmentKind::Assert) => "let assert ",
+            Some(AssignmentKind::DeprecatedAssert) => "let assert ",
+            // TODO: remove when Try has been removed.
             None => "try ",
         };
 
@@ -657,15 +670,17 @@ impl<'comments> Formatter<'comments> {
         let comments = self.pop_comments(expr.start_byte_index());
 
         let document = match expr {
+            UntypedExpr::Panic { .. } => "panic".to_doc(),
+
             UntypedExpr::Todo { label: None, .. } => "todo".to_doc(),
 
             UntypedExpr::Todo { label: Some(l), .. } => docvec!["todo(\"", l, "\")"],
 
             UntypedExpr::PipeLine { expressions, .. } => self.pipeline(expressions),
 
-            UntypedExpr::Int { value, .. } => self.int(value.as_str()),
+            UntypedExpr::Int { value, .. } => self.int(value),
 
-            UntypedExpr::Float { value, .. } => self.float(value.as_str()),
+            UntypedExpr::Float { value, .. } => self.float(value),
 
             UntypedExpr::String { value, .. } => self.string(value),
 
@@ -757,7 +772,7 @@ impl<'comments> Formatter<'comments> {
         commented(document, comments)
     }
 
-    fn string<'a>(&self, string: &'a String) -> Document<'a> {
+    fn string<'a>(&self, string: &'a SmolStr) -> Document<'a> {
         let doc = string.to_doc().surround("\"", "\"");
         if string.contains('\n') {
             doc.force_break()
@@ -767,18 +782,34 @@ impl<'comments> Formatter<'comments> {
     }
 
     fn float<'a>(&self, value: &'a str) -> Document<'a> {
+        // Create parts
         let mut parts = value.split('.');
         let integer_part = parts.next().unwrap_or_default();
+        // floating point part
         let fp_part = parts.next().unwrap_or_default();
-
         let integer_doc = self.underscore_integer_string(integer_part);
         let dot_doc = ".".to_doc();
-        let fp_doc = match value.ends_with('.') {
-            true => "0".to_doc(),
-            false => fp_part.to_doc(),
-        };
 
-        integer_doc.append(dot_doc).append(fp_doc)
+        // Split fp_part into a regular fractional and maybe a scientific part
+        let (fp_part_fractional, fp_part_scientific) = fp_part.split_at(
+            fp_part
+                .chars()
+                .position(|ch| ch == 'e')
+                .unwrap_or(fp_part.len()),
+        );
+
+        // Trim right any consequtive '0's
+        let mut fp_part_fractional = fp_part_fractional.trim_end_matches('0').to_string();
+        // If there is no fractional part left, add a '0', thus that 1. becomes 1.0 etc.
+        if fp_part_fractional.is_empty() {
+            fp_part_fractional.push('0');
+        }
+        let fp_doc = fp_part_fractional.chars().collect::<SmolStr>();
+
+        integer_doc
+            .append(dot_doc)
+            .append(fp_doc)
+            .append(fp_part_scientific)
     }
 
     fn int<'a>(&self, value: &'a str) -> Document<'a> {
@@ -813,14 +844,14 @@ impl<'comments> Formatter<'comments> {
             j += 1;
         }
 
-        Document::String(new_value.chars().rev().collect())
+        new_value.chars().rev().collect::<SmolStr>().to_doc()
     }
 
     fn pattern_constructor<'a>(
         &mut self,
         name: &'a str,
         args: &'a [CallArg<UntypedPattern>],
-        module: &'a Option<String>,
+        module: &'a Option<SmolStr>,
         with_spread: bool,
     ) -> Document<'a> {
         fn is_breakable(expr: &UntypedPattern) -> bool {
@@ -1041,10 +1072,11 @@ impl<'comments> Formatter<'comments> {
         let doc_comments = self.doc_comments(constructor.location.start);
 
         let doc = if constructor.arguments.is_empty() {
-            constructor.name.to_doc()
+            constructor.name.as_str().to_doc()
         } else {
             constructor
                 .name
+                .as_str()
                 .to_doc()
                 .append(wrap_args(constructor.arguments.iter().map(
                     |RecordConstructorArg {
@@ -1076,7 +1108,7 @@ impl<'comments> Formatter<'comments> {
         public: bool,
         opaque: bool,
         name: &'a str,
-        args: &'a [String],
+        args: &'a [SmolStr],
         constructors: &'a [RecordConstructor<A>],
         location: &'a SrcSpan,
     ) -> Document<'a> {
@@ -1110,7 +1142,7 @@ impl<'comments> Formatter<'comments> {
         &mut self,
         public: bool,
         name: &'a str,
-        args: &'a [String],
+        args: &'a [SmolStr],
         location: &'a SrcSpan,
     ) -> Document<'a> {
         let _ = self.pop_empty_lines(location.start);
@@ -1197,6 +1229,7 @@ impl<'comments> Formatter<'comments> {
         let comments = self.pop_comments(arg.location.start);
         let doc = arg
             .label
+            .as_str()
             .to_doc()
             .append(": ")
             .append(self.wrap_expr(&arg.value));
@@ -1243,20 +1276,21 @@ impl<'comments> Formatter<'comments> {
 
     fn clause<'a>(&mut self, clause: &'a UntypedClause, index: u32) -> Document<'a> {
         let space_before = self.pop_empty_lines(clause.location.start);
-        let after_position = clause.location.end;
+        let comments = self.pop_comments(clause.location.start);
         let clause_doc = join(
             std::iter::once(&clause.pattern)
                 .chain(&clause.alternative_patterns)
                 .map(|p| join(p.iter().map(|p| self.pattern(p)), ", ".to_doc())),
-            " | ".to_doc(),
-        );
+            break_("", " ").append("| "),
+        )
+        .group();
+
         let clause_doc = match &clause.guard {
             None => clause_doc,
             Some(guard) => clause_doc.append(" if ").append(self.clause_guard(guard)),
         };
 
-        // Remove any unused empty lines within the clause
-        let _ = self.pop_empty_lines(after_position);
+        let clause_doc = commented(clause_doc, comments);
 
         if index == 0 {
             clause_doc
@@ -1273,7 +1307,7 @@ impl<'comments> Formatter<'comments> {
         &mut self,
         public: bool,
         name: &'a str,
-        args: &'a [String],
+        args: &'a [SmolStr],
     ) -> Document<'a> {
         pub_(public)
             .append("external type ")
@@ -1325,9 +1359,9 @@ impl<'comments> Formatter<'comments> {
     fn pattern<'a>(&mut self, pattern: &'a UntypedPattern) -> Document<'a> {
         let comments = self.pop_comments(pattern.location().start);
         let doc = match pattern {
-            Pattern::Int { value, .. } => value.to_doc(),
+            Pattern::Int { value, .. } => self.int(value),
 
-            Pattern::Float { value, .. } => value.to_doc(),
+            Pattern::Float { value, .. } => self.float(value),
 
             Pattern::String { value, .. } => self.string(value),
 
@@ -1503,17 +1537,17 @@ impl<'comments> Formatter<'comments> {
     }
 
     fn use_<'a>(&mut self, use_: &'a Use) -> Document<'a> {
-        let call = docvec![break_("", " "), self.expr(&use_.call)]
-            .nest(INDENT)
-            .group();
+        let call = if use_.call.is_call() {
+            docvec![" ", self.expr(&use_.call)]
+        } else {
+            docvec![break_("", " "), self.expr(&use_.call)].nest(INDENT)
+        }
+        .group();
 
         if use_.assignments.is_empty() {
             docvec!["use <-", call]
         } else {
-            let assignments = use_
-                .assignments
-                .iter()
-                .map(|(name, _)| name.name().to_doc());
+            let assignments = use_.assignments.iter().map(|pattern| self.pattern(pattern));
             let assignments = Itertools::intersperse(assignments, break_(",", ", "));
             let left = ["use".to_doc(), break_("", " ")]
                 .into_iter()
@@ -1545,16 +1579,16 @@ fn pub_(public: bool) -> Document<'static> {
 
 impl<'a> Documentable<'a> for &'a UnqualifiedImport {
     fn to_doc(self) -> Document<'a> {
-        self.name.to_doc().append(match &self.as_name {
+        self.name.as_str().to_doc().append(match &self.as_name {
             None => nil(),
             Some(s) => " as ".to_doc().append(s.as_str()),
         })
     }
 }
 
-fn label(label: &Option<String>) -> Document<'_> {
+fn label(label: &Option<SmolStr>) -> Document<'_> {
     match label {
-        Some(s) => Document::Str(s).append(": "),
+        Some(s) => s.to_doc().append(": "),
         None => nil(),
     }
 }
@@ -1754,7 +1788,7 @@ where
         BitStringSegmentOption::Unit { value, .. } => "unit"
             .to_doc()
             .append("(")
-            .append(Document::String(format!("{}", value)))
+            .append(Document::String(format!("{value}")))
             .append(")"),
     }
 }

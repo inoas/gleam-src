@@ -10,6 +10,7 @@ use gleam_core::{
     uid::UniqueIdGenerator,
     Result,
 };
+use smol_str::SmolStr;
 use std::path::Path;
 
 pub fn command(options: CompilePackage) -> Result<()> {
@@ -53,7 +54,7 @@ pub fn command(options: CompilePackage) -> Result<()> {
     Ok(())
 }
 
-fn load_libraries(ids: &UniqueIdGenerator, lib: &Path) -> Result<im::HashMap<String, Module>> {
+fn load_libraries(ids: &UniqueIdGenerator, lib: &Path) -> Result<im::HashMap<SmolStr, Module>> {
     tracing::info!("Reading precompiled module metadata files");
     let mut manifests = im::HashMap::new();
     for lib in fs::read_dir(lib)?.filter_map(Result::ok) {
@@ -61,10 +62,10 @@ fn load_libraries(ids: &UniqueIdGenerator, lib: &Path) -> Result<im::HashMap<Str
         if !path.is_dir() {
             continue;
         }
-        for module in fs::gleam_modules_metadata_paths(path)? {
+        for module in fs::module_caches_paths(path)? {
             let reader = fs::buffered_reader(module)?;
             let module = metadata::ModuleDecoder::new(ids.clone()).read(reader)?;
-            let _ = manifests.insert(module.name.join("/"), module);
+            let _ = manifests.insert(module.name.clone(), module);
         }
     }
     Ok(manifests)

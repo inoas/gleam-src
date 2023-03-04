@@ -1,40 +1,39 @@
 ---
 source: compiler-core/src/javascript/tests/bools.rs
-assertion_line: 52
 expression: "\nfn go(x, y) {\n  assert True = x\n  assert False = x\n  assert Nil = y\n}\n"
 ---
-import { throwError } from "../gleam.mjs";
+import { makeError } from "../gleam.mjs";
 
 function go(x, y) {
   if (!x) {
-    throwError(
+    throw makeError(
       "assignment_no_match",
       "my/mod",
       3,
       "go",
       "Assignment pattern did not match",
       { value: x }
-    );
+    )
   }
   if (x) {
-    throwError(
+    throw makeError(
       "assignment_no_match",
       "my/mod",
       4,
       "go",
       "Assignment pattern did not match",
       { value: x }
-    );
+    )
   }
   if (y) {
-    throwError(
+    throw makeError(
       "assignment_no_match",
       "my/mod",
       5,
       "go",
       "Assignment pattern did not match",
       { value: y }
-    );
+    )
   }
   return y;
 }

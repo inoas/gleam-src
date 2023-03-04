@@ -22,21 +22,21 @@ impl SourceLinker {
                     "https://github.com/{}/{}/blob/v{}/{}#L",
                     user, repo, project_config.version, path_in_repo
                 ),
-                "-L".to_string(),
+                "-L".into(),
             )),
             Repository::GitLab { user, repo } => Some((
                 format!(
                     "https://gitlab.com/{}/{}/-/blob/v{}/{}#L",
                     user, repo, project_config.version, path_in_repo
                 ),
-                "-".to_string(),
+                "-".into(),
             )),
             Repository::BitBucket { user, repo } => Some((
                 format!(
                     "https://bitbucket.com/{}/{}/src/v{}/{}#lines-",
                     user, repo, project_config.version, path_in_repo
                 ),
-                ":".to_string(),
+                ":".into(),
             )),
             Repository::Custom { .. } | Repository::None => None,
         };
@@ -51,10 +51,10 @@ impl SourceLinker {
             Some((base, line_sep)) => {
                 let start_line = self.line_numbers.line_number(span.start);
                 let end_line = self.line_numbers.line_number(span.end);
-                format!("{}{}{}{}", base, start_line, line_sep, end_line)
+                format!("{base}{start_line}{line_sep}{end_line}")
             }
 
-            None => "".to_string(),
+            None => "".into(),
         }
     }
 }

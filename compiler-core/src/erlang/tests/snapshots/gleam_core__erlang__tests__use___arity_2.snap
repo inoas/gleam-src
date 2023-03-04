@@ -4,9 +4,14 @@ assertion_line: 22
 expression: "\npub fn main() {\n  use <- pair(1.0)\n  123\n}\n\nfn pair(x, f) {\n  let y = f()\n  #(x, y)\n}\n"
 ---
 -module(the_app).
--compile(no_auto_import).
+-compile([no_auto_import, nowarn_unused_vars]).
 
 -export([main/0]).
+
+-spec pair(J, fun(() -> M)) -> {J, M}.
+pair(X, F) ->
+    Y = F(),
+    {X, Y}.
 
 -spec main() -> {float(), integer()}.
 main() ->
@@ -16,9 +21,4 @@ main() ->
             123
         end
     ).
-
--spec pair(float(), fun(() -> integer())) -> {float(), integer()}.
-pair(X, F) ->
-    Y = F(),
-    {X, Y}.
 

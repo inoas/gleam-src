@@ -56,9 +56,10 @@ mod token;
 
 use crate::ast::{
     Arg, ArgNames, AssignName, AssignmentKind, BinOp, BitStringSegment, BitStringSegmentOption,
-    CallArg, Clause, ClauseGuard, Constant, ExternalFnArg, HasLocation, Module, Pattern,
+    CallArg, Clause, ClauseGuard, Constant, CustomType, ExternalFnArg, ExternalFunction,
+    ExternalType, Function, HasLocation, Import, Module, ModuleConstant, Pattern,
     RecordConstructor, RecordConstructorArg, RecordUpdateSpread, SrcSpan, Statement, TargetGroup,
-    TodoKind, TypeAst, UnqualifiedImport, UntypedArg, UntypedClause, UntypedClauseGuard,
+    TodoKind, TypeAlias, TypeAst, UnqualifiedImport, UntypedArg, UntypedClause, UntypedClauseGuard,
     UntypedConstant, UntypedExpr, UntypedExternalFnArg, UntypedModule, UntypedPattern,
     UntypedRecordUpdateArg, UntypedStatement, Use, CAPTURE_VARIABLE,
 };
@@ -66,6 +67,7 @@ use crate::build::Target;
 use crate::parse::extra::ModuleExtra;
 use error::{LexicalError, ParseError, ParseErrorType};
 use lexer::{LexResult, Spanned};
+use smol_str::SmolStr;
 use std::cmp::Ordering;
 use std::str::FromStr;
 use token::Token;
@@ -131,7 +133,7 @@ where
         let statements = Parser::series_of(self, &Parser::parse_target_group, None);
         let statements = self.ensure_no_errors_or_remaining_input(statements)?;
         Ok(Module {
-            name: vec![],
+            name: "".into(),
             documentation: vec![],
             type_info: (),
             statements,
@@ -150,7 +152,7 @@ where
         let parse_result = self.ensure_no_errors(parse_result)?;
         if let Some((start, _, end)) = self.next_tok() {
             // there are still more tokens
-            let expected = vec!["An import, const, type, if block, or function.".to_string()];
+            let expected = vec!["An import, const, type, if block, or function.".into()];
             return parse_error(
                 ParseErrorType::UnexpectedToken {
                     expected,
@@ -248,9 +250,7 @@ where
                 match self.next_tok() {
                     Some((_, Token::Type, _)) => self.parse_external_type(start, true),
                     Some((_, Token::Fn, _)) => self.parse_external_fn(start, true),
-                    _ => {
-                        self.next_tok_unexpected(vec!["A type or function definition".to_string()])?
-                    }
+                    _ => self.next_tok_unexpected(vec!["A type or function definition".into()])?,
                 }
             }
 
@@ -407,6 +407,13 @@ where
                 }
             }
 
+            Some((start, Token::Panic, end)) => {
+                let _ = self.next_tok();
+                UntypedExpr::Panic {
+                    location: SrcSpan { start, end },
+                }
+            }
+
             Some((start, Token::Hash, _)) => {
                 let _ = self.next_tok();
                 let _ = self.expect_one(&Token::LeftParen)?;
@@ -424,13 +431,27 @@ where
                 let _ = self.next_tok();
                 let elements =
                     Parser::series_of(self, &Parser::parse_expression, Some(&Token::Comma))?;
+
+                // Parse an optional tail
+                let mut spread_given = false;
                 let mut tail = None;
                 if self.maybe_one(&Token::DotDot).is_some() {
+                    spread_given = true;
                     tail = self.parse_expression()?.map(Box::new);
                     let _ = self.maybe_one(&Token::Comma);
                 }
                 let (_, end) = self.expect_one(&Token::RightSquare)?;
 
+                // Return errors for malformed lists
+                if spread_given && tail.is_none() {
+                    return parse_error(
+                        ParseErrorType::ListSpreadWithoutTail,
+                        SrcSpan {
+                            start: end - 1,
+                            end,
+                        },
+                    );
+                }
                 if tail.is_some() && elements.is_empty() {
                     return parse_error(
                         ParseErrorType::ListSpreadWithoutElements,
@@ -469,13 +490,13 @@ where
             Some((start, Token::Fn, _)) => {
                 let _ = self.next_tok();
                 match self.parse_function(start, false, true)? {
-                    Some(Statement::Fn {
+                    Some(Statement::Function(Function {
                         location,
                         arguments: args,
                         body,
                         return_annotation,
                         ..
-                    }) => UntypedExpr::Fn {
+                    })) => UntypedExpr::Fn {
                         location,
                         is_capture: false,
                         arguments: args,
@@ -485,8 +506,7 @@ where
 
                     _ => {
                         // this isn't just none, it could also be Some(UntypedExpr::..)
-                        return self
-                            .next_tok_unexpected(vec!["An opening parenthesis.".to_string()]);
+                        return self.next_tok_unexpected(vec!["An opening parenthesis.".into()]);
                     }
                 }
             }
@@ -529,12 +549,18 @@ where
 
             Some((start, Token::Let, _)) => {
                 let _ = self.next_tok();
-                self.parse_assignment(start, AssignmentKind::Let)?
+                let kind = if let Some((_, Token::Assert, _)) = self.tok0 {
+                    _ = self.next_tok();
+                    AssignmentKind::Assert
+                } else {
+                    AssignmentKind::Let
+                };
+                self.parse_assignment(start, kind)?
             }
 
             Some((start, Token::Assert, _)) => {
                 let _ = self.next_tok();
-                self.parse_assignment(start, AssignmentKind::Assert)?
+                self.parse_assignment(start, AssignmentKind::DeprecatedAssert)?
             }
 
             Some((start, Token::Use, _)) => {
@@ -627,7 +653,7 @@ where
                     t0 => {
                         self.tok0 = t0;
                         return self.next_tok_unexpected(vec![
-                            "A positive integer or a field name.".to_string(),
+                            "A positive integer or a field name.".into(),
                         ]);
                     }
                 }
@@ -694,7 +720,7 @@ where
         let assignments = if let Some((_, Token::LArrow, _)) = self.tok0 {
             vec![]
         } else {
-            Parser::series_of(self, &Parser::parse_use_assignment, Some(&Token::Comma))?
+            Parser::series_of(self, &Parser::parse_pattern, Some(&Token::Comma))?
         };
 
         _ = self.expect_one(&Token::LArrow)?;
@@ -707,11 +733,6 @@ where
         }))
     }
 
-    fn parse_use_assignment(&mut self) -> Result<Option<(AssignName, SrcSpan)>, ParseError> {
-        let (start, name, end) = self.expect_assign_name()?;
-        Ok(Some((name, SrcSpan::new(start, end))))
-    }
-
     // An assignment, with `Let` or `Assert` already consumed
     fn parse_assignment(
         &mut self,
@@ -722,10 +743,7 @@ where
             p
         } else {
             // DUPE: 62884
-            return self.next_tok_unexpected(vec![
-                "A pattern".to_string(),
-                "See: https://gleam.run/book/tour/patterns".to_string(),
-            ])?;
+            return self.next_tok_unexpected(vec!["A pattern".into()])?;
         };
         let annotation = self.parse_type_annotation(&Token::Colon, false)?;
         let (eq_s, eq_e) = self.maybe_one(&Token::Equal).ok_or(ParseError {
@@ -770,10 +788,7 @@ where
                 p
             } else {
                 // DUPE: 62884
-                return self.next_tok_unexpected(vec![
-                    "A pattern".to_string(),
-                    "See: https://gleam.run/book/tour/patterns".to_string(),
-                ])?;
+                return self.next_tok_unexpected(vec!["A pattern".into()])?;
             };
             let annotation = self.parse_type_annotation(&Token::Colon, false)?;
             let (eq_s, eq_e) = self.expect_one(&Token::Equal)?;
@@ -984,7 +999,7 @@ where
                             start: rsqb_e - 1,
                             end: rsqb_e,
                         },
-                        name: "_".to_string(),
+                        name: "_".into(),
                     }),
                     // No tail specified
                     None => None,
@@ -1034,9 +1049,8 @@ where
             let guard = self.parse_case_clause_guard(false)?;
             let (arr_s, arr_e) = self.expect_one(&Token::RArrow).map_err(|mut e| {
                 if let ParseErrorType::UnexpectedToken { ref mut hint, .. } = e.error {
-                    *hint = Some(
-                        "Did you mean to wrap a multi line clause in curly braces?".to_string(),
-                    );
+                    *hint =
+                        Some("Did you mean to wrap a multi line clause in curly braces?".into());
                 }
                 e
             })?;
@@ -1168,7 +1182,7 @@ where
                         Some((start, _, end)) => {
                             parse_error(ParseErrorType::InvalidTupleAccess, SrcSpan { start, end })
                         }
-                        _ => self.next_tok_unexpected(vec!["A positive integer".to_string()]),
+                        _ => self.next_tok_unexpected(vec!["A positive integer".into()]),
                     }
                 } else {
                     Ok(Some(ClauseGuard::Var {
@@ -1201,7 +1215,7 @@ where
     //   UpName( args )
     fn expect_constructor_pattern(
         &mut self,
-        module: Option<(u32, String, u32)>,
+        module: Option<(u32, SmolStr, u32)>,
     ) -> Result<UntypedPattern, ParseError> {
         let (mut start, name, end) = self.expect_upname()?;
         let (args, with_spread, end) = self.parse_constructor_pattern_args(end)?;
@@ -1307,7 +1321,7 @@ where
                     value,
                 }))
             } else {
-                self.next_tok_unexpected(vec!["An expression".to_string()])
+                self.next_tok_unexpected(vec!["An expression".into()])
             }
         } else {
             Ok(None)
@@ -1329,7 +1343,7 @@ where
         public: bool,
         is_anon: bool,
     ) -> Result<Option<UntypedStatement>, ParseError> {
-        let mut name = String::new();
+        let mut name = SmolStr::new("");
         if !is_anon {
             let (_, n, _) = self.expect_name()?;
             name = n;
@@ -1350,9 +1364,6 @@ where
             .map(|l| l.location().end)
             .unwrap_or_else(|| if is_anon { rbr_e } else { rpar_e });
         let body = match some_body {
-            None if is_anon => {
-                return self.next_tok_unexpected(vec!["The body of a function".into()]);
-            }
             None => UntypedExpr::Todo {
                 kind: TodoKind::EmptyFunction,
                 location: SrcSpan { start, end },
@@ -1360,7 +1371,7 @@ where
             },
             Some((body, _)) => body,
         };
-        Ok(Some(Statement::Fn {
+        Ok(Some(Statement::Function(Function {
             doc: None,
             location: SrcSpan { start, end },
             end_position: rbr_e - 1,
@@ -1370,7 +1381,7 @@ where
             body,
             return_type: (),
             return_annotation,
-        }))
+        })))
     }
 
     // Starts after "fn"
@@ -1394,7 +1405,7 @@ where
         let (_, fun, end) = self.expect_string()?;
 
         if let Some(retrn) = return_annotation {
-            Ok(Some(Statement::ExternalFn {
+            Ok(Some(Statement::ExternalFunction(ExternalFunction {
                 doc: None,
                 location: SrcSpan { start, end },
                 public,
@@ -1404,7 +1415,7 @@ where
                 fun,
                 return_: retrn,
                 return_type: (),
-            }))
+            })))
         } else {
             parse_error(
                 ParseErrorType::ExpectedType,
@@ -1611,13 +1622,13 @@ where
         public: bool,
     ) -> Result<Option<UntypedStatement>, ParseError> {
         let (_, name, args, end) = self.expect_type_name()?;
-        Ok(Some(Statement::ExternalType {
+        Ok(Some(Statement::ExternalType(ExternalType {
             location: SrcSpan { start, end },
             public,
             name,
             arguments: args,
             doc: None,
-        }))
+        })))
     }
 
     //
@@ -1661,7 +1672,7 @@ where
             if constructors.is_empty() {
                 parse_error(ParseErrorType::NoConstructors, SrcSpan { start, end })
             } else {
-                Ok(Some(Statement::CustomType {
+                Ok(Some(Statement::CustomType(CustomType {
                     doc: None,
                     location: SrcSpan { start, end },
                     public,
@@ -1670,14 +1681,14 @@ where
                     parameters,
                     constructors,
                     typed_parameters: vec![],
-                }))
+                })))
             }
         } else if let Some((eq_s, eq_e)) = self.maybe_one(&Token::Equal) {
             // Type Alias
             if !opaque {
                 if let Some(t) = self.parse_type(false)? {
                     let type_end = t.location().end;
-                    Ok(Some(Statement::TypeAlias {
+                    Ok(Some(Statement::TypeAlias(TypeAlias {
                         doc: None,
                         location: SrcSpan {
                             start,
@@ -1688,7 +1699,7 @@ where
                         parameters,
                         type_ast: t,
                         type_: (),
-                    }))
+                    })))
                 } else {
                     parse_error(
                         ParseErrorType::ExpectedType,
@@ -1710,7 +1721,7 @@ where
     // examples:
     //   A
     //   A(one, two)
-    fn expect_type_name(&mut self) -> Result<(u32, String, Vec<String>, u32), ParseError> {
+    fn expect_type_name(&mut self) -> Result<(u32, SmolStr, Vec<SmolStr>, u32), ParseError> {
         let (start, upname, end) = self.expect_upname()?;
         if self.maybe_one(&Token::LeftParen).is_some() {
             let args =
@@ -1891,8 +1902,8 @@ where
         &mut self,
         for_const: bool,
         start: u32,
-        module: Option<String>,
-        name: String,
+        module: Option<SmolStr>,
+        name: SmolStr,
         end: u32,
     ) -> Result<Option<TypeAst>, ParseError> {
         if self.maybe_one(&Token::LeftParen).is_some() {
@@ -1936,14 +1947,16 @@ where
     fn parse_import(&mut self) -> Result<Option<UntypedStatement>, ParseError> {
         let mut start = 0;
         let mut end;
-        let mut module = vec![];
+        let mut module = String::new();
         // Gather module names
         loop {
             let (s, name, e) = self.expect_name()?;
             if module.is_empty() {
                 start = s;
+            } else {
+                module.push('/');
             }
-            module.push(name);
+            module.push_str(&name);
             end = e;
 
             // Ueful error for : import a/.{b}
@@ -1980,13 +1993,13 @@ where
             end = e;
         }
 
-        Ok(Some(Statement::Import {
+        Ok(Some(Statement::Import(Import {
             location: SrcSpan { start, end },
             unqualified,
-            module,
+            module: module.into(),
             as_name,
             package: (),
-        }))
+        })))
     }
 
     // [Name (as Name)? | UpName (as Name)? ](, [Name (as Name)? | UpName (as Name)?])*,?
@@ -2056,7 +2069,7 @@ where
 
         let (eq_s, eq_e) = self.expect_one(&Token::Equal)?;
         if let Some(value) = self.parse_const_value()? {
-            Ok(Some(Statement::ModuleConstant {
+            Ok(Some(Statement::ModuleConstant(ModuleConstant {
                 doc: None,
                 location: SrcSpan { start, end },
                 public,
@@ -2064,7 +2077,7 @@ where
                 annotation,
                 value: Box::new(value),
                 type_: (),
-            }))
+            })))
         } else {
             parse_error(
                 ParseErrorType::NoValueAfterEqual,
@@ -2188,7 +2201,7 @@ where
                     }
                     Some((start, _, end)) => parse_error(
                         ParseErrorType::UnexpectedToken {
-                            expected: vec!["UpName".to_string(), "Name".to_string()],
+                            expected: vec!["UpName".into(), "Name".into()],
                             hint: None,
                         },
                         SrcSpan { start, end },
@@ -2226,8 +2239,8 @@ where
     fn parse_const_record_finish(
         &mut self,
         start: u32,
-        module: Option<String>,
-        name: String,
+        module: Option<SmolStr>,
+        name: SmolStr,
         end: u32,
     ) -> Result<Option<UntypedConstant>, ParseError> {
         if self.maybe_one(&Token::LeftParen).is_some() {
@@ -2295,7 +2308,7 @@ where
                 }))
             }
         } else if name.is_some() {
-            self.next_tok_unexpected(vec!["a constant value".to_string()])?
+            self.next_tok_unexpected(vec!["a constant value".into()])?
         } else {
             Ok(None)
         }
@@ -2313,7 +2326,7 @@ where
         &mut self,
         value_parser: &impl Fn(&mut Self) -> Result<Option<A>, ParseError>,
         arg_parser: &impl Fn(&mut Self) -> Result<A, ParseError>,
-        to_int_segment: &impl Fn(String, u32, u32) -> A,
+        to_int_segment: &impl Fn(SmolStr, u32, u32) -> A,
     ) -> Result<Option<BitStringSegment<A, ()>>, ParseError>
     where
         A: HasLocation,
@@ -2354,7 +2367,7 @@ where
     fn parse_bit_string_segment_option<A>(
         &mut self,
         arg_parser: &impl Fn(&mut Self) -> Result<A, ParseError>,
-        to_int_segment: &impl Fn(String, u32, u32) -> A,
+        to_int_segment: &impl Fn(SmolStr, u32, u32) -> A,
     ) -> Result<Option<BitStringSegmentOption<A>>, ParseError> {
         match self.next_tok() {
             // named segment
@@ -2384,7 +2397,7 @@ where
                                     }),
                                 }
                             } else {
-                                self.next_tok_unexpected(vec!["positive integer".to_string()])
+                                self.next_tok_unexpected(vec!["positive integer".into()])
                             }
                         }
 
@@ -2419,8 +2432,8 @@ where
             })),
             // invalid
             _ => self.next_tok_unexpected(vec![
-                "A valid bitstring segment type".to_string(),
-                "See: https://gleam.run/book/tour/bit-strings.html".to_string(),
+                "A valid bitstring segment type".into(),
+                "See: https://gleam.run/book/tour/bit-strings.html".into(),
             ]),
         }
     }
@@ -2436,7 +2449,7 @@ where
                 location: SrcSpan { start, end },
                 value,
             }),
-            _ => self.next_tok_unexpected(vec!["A variable name or an integer".to_string()]),
+            _ => self.next_tok_unexpected(vec!["A variable name or an integer".into()]),
         }
     }
 
@@ -2446,7 +2459,7 @@ where
                 location: SrcSpan { start, end },
                 value,
             }),
-            _ => self.next_tok_unexpected(vec!["A variable name or an integer".to_string()]),
+            _ => self.next_tok_unexpected(vec!["A variable name or an integer".into()]),
         }
     }
 
@@ -2454,7 +2467,7 @@ where
         if let Some(e) = self.parse_expression()? {
             Ok(e)
         } else {
-            self.next_tok_unexpected(vec!["An expression".to_string()])
+            self.next_tok_unexpected(vec!["An expression".into()])
         }
     }
 
@@ -2466,12 +2479,12 @@ where
     fn expect_one(&mut self, wanted: &Token) -> Result<(u32, u32), ParseError> {
         match self.maybe_one(wanted) {
             Some((start, end)) => Ok((start, end)),
-            None => self.next_tok_unexpected(vec![wanted.to_string()]),
+            None => self.next_tok_unexpected(vec![wanted.to_string().into()]),
         }
     }
 
     // Expect a Name else a token dependent helpful error
-    fn expect_name(&mut self) -> Result<(u32, String, u32), ParseError> {
+    fn expect_name(&mut self) -> Result<(u32, SmolStr, u32), ParseError> {
         let (start, token, end) = self.expect_assign_name()?;
         match token {
             AssignName::Variable(name) => Ok((start, name, end)),
@@ -2484,28 +2497,24 @@ where
     fn expect_assign_name(&mut self) -> Result<(u32, AssignName, u32), ParseError> {
         let t = self.next_tok();
         match t {
-            Some((start, tok, end)) => {
-                if let Token::Name { name } = tok {
-                    Ok((start, AssignName::Variable(name), end))
-                } else if let Token::DiscardName { name, .. } = tok {
-                    Ok((start, AssignName::Discard(name), end))
-                } else if let Token::UpName { .. } = tok {
+            Some((start, tok, end)) => match tok {
+                Token::Name { name } => Ok((start, AssignName::Variable(name), end)),
+                Token::DiscardName { name, .. } => Ok((start, AssignName::Discard(name), end)),
+                Token::UpName { .. } => {
                     parse_error(ParseErrorType::IncorrectName, SrcSpan { start, end })
-                } else if is_reserved_word(tok) {
-                    parse_error(
-                        ParseErrorType::UnexpectedReservedWord,
-                        SrcSpan { start, end },
-                    )
-                } else {
-                    parse_error(ParseErrorType::ExpectedName, SrcSpan { start, end })
                 }
-            }
+                _ if is_reserved_word(tok) => parse_error(
+                    ParseErrorType::UnexpectedReservedWord,
+                    SrcSpan { start, end },
+                ),
+                _ => parse_error(ParseErrorType::ExpectedName, SrcSpan { start, end }),
+            },
             None => parse_error(ParseErrorType::UnexpectedEof, SrcSpan { start: 0, end: 0 }),
         }
     }
 
     // Expect an UpName else a token dependent helpful error
-    fn expect_upname(&mut self) -> Result<(u32, String, u32), ParseError> {
+    fn expect_upname(&mut self) -> Result<(u32, SmolStr, u32), ParseError> {
         let t = self.next_tok();
         match t {
             Some((start, tok, end)) => {
@@ -2541,10 +2550,10 @@ where
     }
 
     // Expect a String else error
-    fn expect_string(&mut self) -> Result<(u32, String, u32), ParseError> {
+    fn expect_string(&mut self) -> Result<(u32, SmolStr, u32), ParseError> {
         match self.next_tok() {
             Some((start, Token::String { value }, end)) => Ok((start, value, end)),
-            _ => self.next_tok_unexpected(vec!["a string".to_string()]),
+            _ => self.next_tok_unexpected(vec!["a string".into()]),
         }
     }
 
@@ -2591,7 +2600,7 @@ where
     }
 
     // If next token is a Name, consume it and return relevant info, otherwise, return none
-    fn maybe_name(&mut self) -> Option<(u32, String, u32)> {
+    fn maybe_name(&mut self) -> Option<(u32, SmolStr, u32)> {
         match self.tok0.take() {
             Some((s, Token::Name { name }, e)) => {
                 let _ = self.next_tok();
@@ -2605,7 +2614,7 @@ where
     }
 
     // if next token is an UpName, consume it and return relevant info, otherwise, return none
-    fn maybe_upname(&mut self) -> Option<(u32, String, u32)> {
+    fn maybe_upname(&mut self) -> Option<(u32, SmolStr, u32)> {
         match self.tok0.take() {
             Some((s, Token::UpName { name }, e)) => {
                 let _ = self.next_tok();
@@ -2619,7 +2628,7 @@ where
     }
 
     // if next token is a DiscardName, consume it and return relevant info, otherwise, return none
-    fn maybe_discard_name(&mut self) -> Option<(u32, String, u32)> {
+    fn maybe_discard_name(&mut self) -> Option<(u32, SmolStr, u32)> {
         match self.tok0.take() {
             Some((s, Token::DiscardName { name }, e)) => {
                 let _ = self.next_tok();
@@ -2633,7 +2642,7 @@ where
     }
 
     // Error on the next token or EOF
-    fn next_tok_unexpected<A>(&mut self, expected: Vec<String>) -> Result<A, ParseError> {
+    fn next_tok_unexpected<A>(&mut self, expected: Vec<SmolStr>) -> Result<A, ParseError> {
         match self.next_tok() {
             None => parse_error(ParseErrorType::UnexpectedEof, SrcSpan { start: 0, end: 0 }),
 
@@ -2924,21 +2933,21 @@ fn clause_guard_reduction(
 // Bitstrings in patterns, guards, and expressions have a very similar structure
 // but need specific types. These are helpers for that. There is probably a
 // rustier way to do this :)
-fn bit_string_pattern_int(value: String, start: u32, end: u32) -> UntypedPattern {
+fn bit_string_pattern_int(value: SmolStr, start: u32, end: u32) -> UntypedPattern {
     Pattern::Int {
         location: SrcSpan { start, end },
         value,
     }
 }
 
-fn bit_string_expr_int(value: String, start: u32, end: u32) -> UntypedExpr {
+fn bit_string_expr_int(value: SmolStr, start: u32, end: u32) -> UntypedExpr {
     UntypedExpr::Int {
         location: SrcSpan { start, end },
         value,
     }
 }
 
-fn bit_string_const_int(value: String, start: u32, end: u32) -> UntypedConstant {
+fn bit_string_const_int(value: SmolStr, start: u32, end: u32) -> UntypedConstant {
     Constant::Int {
         location: SrcSpan { start, end },
         value,
@@ -3010,7 +3019,7 @@ pub enum ParserArg {
     Arg(Box<CallArg<UntypedExpr>>),
     Hole {
         location: SrcSpan,
-        label: Option<String>,
+        label: Option<SmolStr>,
     },
 }
 
@@ -3033,7 +3042,7 @@ pub fn make_call(
                     location,
                     value: UntypedExpr::Var {
                         location,
-                        name: CAPTURE_VARIABLE.to_string(),
+                        name: CAPTURE_VARIABLE.into(),
                     },
                 }
             }
@@ -3056,7 +3065,7 @@ pub fn make_call(
                 location: SrcSpan { start: 0, end: 0 },
                 annotation: None,
                 names: ArgNames::Named {
-                    name: CAPTURE_VARIABLE.to_string(),
+                    name: CAPTURE_VARIABLE.into(),
                 },
                 type_: (),
             }],

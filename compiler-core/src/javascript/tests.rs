@@ -11,6 +11,7 @@ mod generics;
 mod lists;
 mod modules;
 mod numbers;
+mod panic;
 mod prelude;
 mod records;
 mod recursion;
@@ -35,34 +36,34 @@ macro_rules! assert_js {
         // TODO: Currently we do this here and also in the tests. It would be better
         // to have one place where we create all this required state for use in each
         // place.
-        let _ = modules.insert("gleam".to_string(), $crate::type_::build_prelude(&ids));
+        let _ = modules.insert("gleam".into(), $crate::type_::build_prelude(&ids));
         let (mut ast, _) = $crate::parse::parse_module($dep_src).expect("dep syntax error");
-        ast.name = $dep_name;
-        let dep = $crate::type_::infer_module(
+        ast.name = $dep_name.into();
+        let dep = $crate::analyse::infer_module(
             $crate::build::Target::JavaScript,
             &ids,
             ast,
             $crate::build::Origin::Src,
-            $dep_package,
+            &$dep_package.into(),
             &modules,
             &mut vec![],
         )
         .expect("should successfully infer");
-        let _ = modules.insert($dep_name.join("/"), dep.type_info);
+        let _ = modules.insert($dep_name.into(), dep.type_info);
         let (mut ast, _) = $crate::parse::parse_module($src).expect("syntax error");
-        ast.name = vec!["my".to_string(), "mod".to_string()];
-        let ast = $crate::type_::infer_module(
+        ast.name = "my/mod".into();
+        let ast = $crate::analyse::infer_module(
             $crate::build::Target::JavaScript,
             &ids,
             ast,
             $crate::build::Origin::Src,
-            CURRENT_PACKAGE,
+            &CURRENT_PACKAGE.into(),
             &modules,
             &mut vec![],
         )
         .expect("should successfully infer");
         let line_numbers = LineNumbers::new($src);
-        let output = module(&ast, &line_numbers, Path::new(""), "").unwrap();
+        let output = module(&ast, &line_numbers, Path::new(""), &"".into()).unwrap();
         insta::assert_snapshot!(insta::internals::AutoName, output, $src);
     }};
 
@@ -74,28 +75,28 @@ macro_rules! assert_js {
         // TODO: Currently we do this here and also in the tests. It would be better
         // to have one place where we create all this required state for use in each
         // place.
-        let _ = modules.insert("gleam".to_string(), $crate::type_::build_prelude(&ids));
+        let _ = modules.insert("gleam".into(), $crate::type_::build_prelude(&ids));
         let (mut ast, _) = $crate::parse::parse_module($dep_src).expect("dep syntax error");
-        ast.name = $dep_name;
-        let dep = $crate::type_::infer_module(
+        ast.name = $dep_name.into();
+        let dep = $crate::analyse::infer_module(
             $crate::build::Target::JavaScript,
             &ids,
             ast,
             $crate::build::Origin::Src,
-            $dep_package,
+            &$dep_package.into(),
             &modules,
             &mut vec![],
         )
         .expect("should successfully infer");
-        let _ = modules.insert($dep_name.join("/"), dep.type_info);
+        let _ = modules.insert($dep_name.into("/"), dep.type_info);
         let (mut ast, _) = $crate::parse::parse_module($src).expect("syntax error");
-        ast.name = vec!["my".to_string(), "mod".to_string()];
-        let ast = $crate::type_::infer_module(
+        ast.name = "my/mod".into();
+        let ast = $crate::analyse::infer_module(
             $crate::build::Target::JavaScript,
             &ids,
             ast,
             $crate::build::Origin::Src,
-            CURRENT_PACKAGE,
+            &CURRENT_PACKAGE.into(),
             &modules,
             &mut vec![],
         )
@@ -115,22 +116,22 @@ macro_rules! assert_js {
         // TODO: Currently we do this here and also in the tests. It would be better
         // to have one place where we create all this required state for use in each
         // place.
-        let _ = modules.insert("gleam".to_string(), $crate::type_::build_prelude(&ids));
+        let _ = modules.insert("gleam".into(), $crate::type_::build_prelude(&ids));
 
         let (mut ast, _) = $crate::parse::parse_module($src).expect("syntax error");
-        ast.name = vec!["my".to_string(), "mod".to_string()];
-        let ast = $crate::type_::infer_module(
+        ast.name = "my/mod".into();
+        let ast = $crate::analyse::infer_module(
             $crate::build::Target::JavaScript,
             &ids,
             ast,
             $crate::build::Origin::Src,
-            "thepackage",
+            &"thepackage".into(),
             &modules,
             &mut vec![],
         )
         .expect("should successfully infer");
         let line_numbers = LineNumbers::new($src);
-        let output = module(&ast, &line_numbers, Path::new(""), "").unwrap();
+        let output = module(&ast, &line_numbers, Path::new(""), &"".into()).unwrap();
         insta::assert_snapshot!(insta::internals::AutoName, output, $src);
     }};
 
@@ -143,22 +144,22 @@ macro_rules! assert_js {
         // TODO: Currently we do this here and also in the tests. It would be better
         // to have one place where we create all this required state for use in each
         // place.
-        let _ = modules.insert("gleam".to_string(), crate::type_::build_prelude(&ids));
+        let _ = modules.insert("gleam".into(), $crate::type_::build_prelude(&ids));
 
-        let (mut ast, _) = crate::parse::parse_module($src).expect("syntax error");
-        ast.name = vec!["my".to_string(), "mod".to_string()];
-        let ast = crate::type_::infer_module(
-            crate::build::Target::JavaScript,
+        let (mut ast, _) = $crate::parse::parse_module($src).expect("syntax error");
+        ast.name = "my/mod".into();
+        let ast = $crate::analyse::infer_module(
+            $crate::build::Target::JavaScript,
             &ids,
             ast,
-            crate::build::Origin::Src,
-            "thepackage",
+            $crate::build::Origin::Src,
+            &"thepackage".into(),
             &modules,
             &mut vec![],
         )
         .expect("should successfully infer");
         let line_numbers = LineNumbers::new($src);
-        let output = module(&ast, &line_numbers, Path::new(""), "").unwrap();
+        let output = module(&ast, &line_numbers, Path::new(""), &"".into()).unwrap();
         assert_eq!(($src, output), ($src, $js.to_string()));
     }};
 }
@@ -174,33 +175,33 @@ macro_rules! assert_ts_def {
         // TODO: Currently we do this here and also in the tests. It would be better
         // to have one place where we create all this required state for use in each
         // place.
-        let _ = modules.insert("gleam".to_string(), $crate::type_::build_prelude(&ids));
+        let _ = modules.insert("gleam".into(), $crate::type_::build_prelude(&ids));
         let (mut ast, _) = $crate::parse::parse_module($dep_src).expect("dep syntax error");
-        ast.name = $dep_name;
-        let dep = $crate::type_::infer_module(
+        ast.name = $dep_name.into();
+        let dep = $crate::analyse::infer_module(
             $crate::build::Target::JavaScript,
             &ids,
             ast,
             $crate::build::Origin::Src,
-            $dep_package,
+            &$dep_package.into(),
             &modules,
             &mut vec![],
         )
         .expect("should successfully infer");
-        let _ = modules.insert($dep_name.join("/"), dep.type_info);
+        let _ = modules.insert($dep_name.into(), dep.type_info);
         let (mut ast, _) = $crate::parse::parse_module($src).expect("syntax error");
-        ast.name = vec!["my".to_string(), "mod".to_string()];
-        let ast = $crate::type_::infer_module(
+        ast.name = "my/mod".into();
+        let ast = $crate::analyse::infer_module(
             $crate::build::Target::JavaScript,
             &ids,
             ast,
             $crate::build::Origin::Src,
-            CURRENT_PACKAGE,
+            &CURRENT_PACKAGE.into(),
             &modules,
             &mut vec![],
         )
         .expect("should successfully infer");
-        let output = ts_declaration(&ast, Path::new(""), "").unwrap();
+        let output = ts_declaration(&ast, Path::new(""), &"".into()).unwrap();
         insta::assert_snapshot!(insta::internals::AutoName, output, $src);
     }};
 
@@ -212,28 +213,28 @@ macro_rules! assert_ts_def {
         // TODO: Currently we do this here and also in the tests. It would be better
         // to have one place where we create all this required state for use in each
         // place.
-        let _ = modules.insert("gleam".to_string(), $crate::type_::build_prelude(&ids));
+        let _ = modules.insert("gleam".into(), $crate::type_::build_prelude(&ids));
         let (mut ast, _) = $crate::parse::parse_module($dep_src).expect("dep syntax error");
-        ast.name = $dep_name;
-        let dep = $crate::type_::infer_module(
+        ast.name = $dep_name.into();
+        let dep = $crate::analyse::infer_module(
             $crate::build::Target::JavaScript,
             &ids,
             ast,
             $crate::build::Origin::Src,
-            $dep_package,
+            &$dep_package.into(),
             &modules,
             &mut vec![],
         )
         .expect("should successfully infer");
-        let _ = modules.insert($dep_name.join("/"), dep.type_info);
+        let _ = modules.insert($dep_name.into("/"), dep.type_info);
         let (mut ast, _) = $crate::parse::parse_module($src).expect("syntax error");
-        ast.name = vec!["my".to_string(), "mod".to_string()];
-        let ast = $crate::type_::infer_module(
+        ast.name = "my/mod".into();
+        let ast = $crate::analyse::infer_module(
             $crate::build::Target::JavaScript,
             &ids,
             ast,
             $crate::build::Origin::Src,
-            CURRENT_PACKAGE,
+            &CURRENT_PACKAGE.into(),
             &modules,
             &mut vec![],
         )
@@ -252,21 +253,21 @@ macro_rules! assert_ts_def {
         // TODO: Currently we do this here and also in the tests. It would be better
         // to have one place where we create all this required state for use in each
         // place.
-        let _ = modules.insert("gleam".to_string(), $crate::type_::build_prelude(&ids));
+        let _ = modules.insert("gleam".into(), $crate::type_::build_prelude(&ids));
 
         let (mut ast, _) = $crate::parse::parse_module($src).expect("syntax error");
-        ast.name = vec!["my".to_string(), "mod".to_string()];
-        let ast = $crate::type_::infer_module(
+        ast.name = "my/mod".into();
+        let ast = $crate::analyse::infer_module(
             $crate::build::Target::JavaScript,
             &ids,
             ast,
             $crate::build::Origin::Src,
-            "thepackage",
+            &"thepackage".into(),
             &modules,
             &mut vec![],
         )
         .expect("should successfully infer");
-        let output = ts_declaration(&ast, Path::new(""), "").unwrap();
+        let output = ts_declaration(&ast, Path::new(""), &"".into()).unwrap();
         insta::assert_snapshot!(insta::internals::AutoName, output, $src);
     }};
 
@@ -279,16 +280,16 @@ macro_rules! assert_ts_def {
         // TODO: Currently we do this here and also in the tests. It would be better
         // to have one place where we create all this required state for use in each
         // place.
-        let _ = modules.insert("gleam".to_string(), crate::type_::build_prelude(&ids));
+        let _ = modules.insert("gleam".into(), $crate::type_::build_prelude(&ids));
 
-        let (mut ast, _) = crate::parse::parse_module($src).expect("syntax error");
-        ast.name = vec!["my".to_string(), "mod".to_string()];
-        let ast = crate::type_::infer_module(
-            crate::build::Target::JavaScript,
+        let (mut ast, _) = $crate::parse::parse_module($src).expect("syntax error");
+        ast.name = "my/mod".into();
+        let ast = $crate::analyse::infer_module(
+            $crate::build::Target::JavaScript,
             &ids,
             ast,
-            crate::build::Origin::Src,
-            "thepackage",
+            $crate::build::Origin::Src,
+            &"thepackage".into(),
             &modules,
             &mut vec![],
         )

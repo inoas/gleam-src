@@ -2,10 +2,121 @@
 
 ## Unreleased
 
+- Semicolons are no longer whitespace. An error will be emitted if one is
+  encountered.
+- Fixed a bug where the compiler used VSCode specific behaviour in the language
+  server which was incompatible with Helix.
+- Fixed a bug where string concatenation patterns on strings with escape
+  characters would generate javascript code with wrong slice index.
+
+## v0.27.0 - 2023-03-01
+
+- Fixed a bug where `panic` could generate incorrect JavaScript code.
+- New projects now require `gleam_stdlib` v0.27.
+
+## v0.27.0-rc1 - 2023-02-26
+
+- The new `panic` keyword can be used to crash the program. This may be useful
+  for situations in which a program has got into an unrecoverable invalid state.
+- `try` expressions are now deprecated and will be removed in a future version.
+- The new `gleam fix` command can be used to automatically convert `try`
+  expressions to `use` expressions.
+- `let assert ... = ...` is now the syntax for assertion assignments. The
+  `assert ... = ...` syntax is deprecated and will be removed in a future
+  version. Run `gleam format` to automatically update your code.
+- `gleam export hex-tarball` can be used to create a tarball suitable for
+  uploading to a Hex compatible package repository.
+- The unused private type and constructor detection has been improved.
+- The argument `--runtime` now accepts `nodejs` as the name for that runtime.
+  The previous name `node` is still accepted.
+- Patterns can now be used in `use` expressions.
+- Fixed a bug where string concatenation patterns could generate javascript
+  code with wrong slice index due to ut8/ut16 length mismatch.
+- The Erlang compiler will no longer emit a duplicate warning for unused
+  variables.
+- Fixed a bug where typescript type definitions for types with unlabelled
+  arguments where generated with an invalid identifier and unlabelled fields
+  were generated with a name that didn't match the javascript implementation.
+- Fixed a bug in the type inferrer were unannotated functions that were
+  used before they were defined in a module could in rare cased be inferred
+  with a more general type than is correct.
+- Fixed a bug where the LSP would fail to show type information on hover for
+  expressions after a use expression.
+- Fixed a bug where imported constants could generated incorrect JavaScript
+  code.
+- Fixed a bug where the LSP would perform codegen for dependencies.
+- Fixed a bug where the LSP would compile native dependencies needlessly.
+- Fixed a bug where integer division with large numbers on JavaScript could
+  produce incorrect results.
+- Fixed a bug where pattern matches on custom types with mixed labelled and
+  unlabelled arguments could not be compiled when targeting JavaScript.
+- Fixed a bug where local variables in case guard constant expressions caused
+  the compiler to panic.
+- The formatter now truncates meaningless zeroes of floats' fractional parts.
+- Anonymous functions may now have an empty body. The compiler will emit a
+  warning for functions without a body, and these functions will crash at
+  runtime if executed.
+- Fixed bug where raised errors on JS would have an extra stack frame recorded
+  in them.
+
+## v0.26.2 - 2023-02-03
+
+- The formatter now wraps long `|` patterns in case clauses over multiple lines.
+- Fixed a bug where unlabelled function arguments could be declared after
+  labelled ones.
+- A broken link was removed from the error messages.
+- Fixed a bug where using a qualified imported record constructor function as a
+  value would produce invalid Erlang code if the name of the record variant was
+  an Erlang reserved word.
+
+## v0.26.1 - 2023-01-22
+
+- New projects now require `gleeunit` v0.10.
+- Rebar3 dependency projects are now compiled in-place. This fixes an issue
+  where some NIF using projects would fail to boot due to some paths not being
+  copied to the `build` directory.
+- An error is now emitted if a list spread expression is written without a tail
+  value.
+- An error is now emitted when a function is defined with multiple arguments
+  with the same name.
+- The error message emitted when a `let` does not match all possible values has
+  been improved.
+- Fixed a bug where the language server wouldn't analyse test code.
+- Fixed a bug where `assert` expressions can generate invalid Erlang.
+  warning.
+- Fixed a bug where arguments would be passed incorrectly to Deno.
+- Fixed a bug where defining variables that shadow external functions could
+  generate invalid JavaScript.
+
+## v0.26.0 - 2023-01-19
+
+[Release blog post](https://gleam.run/news/v0.26-incremental-compilation-and-deno/)
+
+- New projects require `gleam_stdlib` v0.26 and `gleeunit` v0.9.
+- Fixed a bug where JavaScript default projects would fail to publish to Hex.
+
+## v0.26.0-rc1 - 2023-01-12
+
+- Added support for Deno runtime for JavaScript target.
 - Scientific notation is now available for float literals.
 - The compiler now supports incremental compilation at the module level. If a
-  module or its dependencies have not been changed unchanged then it will not be
+  module or its dependencies have not been changed then it will not be
   recompiled.
+- The format used by the formatter has been improved.
+- 4 digit integers are now always formatted without underscores.
+- Running `gleam new` will skip `git init` if the new project directory is
+  already part of a git work tree.
+- Generated HTML documentation now includes all static assets, including web
+  fonts, so that it can be accessed offline and in future once CDNs would 404.
+- Generated HTML documentation now supports TypeScript syntax highlighting.
+- New Gleam projects are created using GitHub actions erlef/setup-beam@v1.15.2.
+- Some modules can now be hidden from the docs by specifying a list of glob
+  patterns in `internal_modules` in `gleam.toml`. The default value for this
+  list is `["$package_name/internal", "$package_name/internal/*"]`.
+- The `gleam new` command gains the `--skip-git` flag to skip creation of
+  `.git/*`, `.gitignore` and `.github/*` files.
+- The `gleam new` command gains the `--skip-github` flag to skip creation of
+  `.github/*` files.
 - Fixed a bug where no error would be emitted if a `src` module imported a
   `test` module.
 - Fixed a bug where comments in list prepending expressions could be formatted
@@ -15,17 +126,10 @@
 - Fixed a bug where long `use` expressions could be formatted incorrectly.
 - Fixed a bug integer multiplication would overflow large integers when
   compiling to JavaScript.
-- 4 digit integers are now always formatted without underscores.
-- Running `gleam new` will skip `git init` if the new project directory is
-  already part of a git work tree.
-- Generated HTML documentation now includes all static assets, including web
-  fonts, so that it can be accessed offline and in future once CDNs would 404.
-- Generated HTML documentation now supports TypeScript syntax highlighting.
-- The `gleam new` command gains the `--skip-git` flag to skip creation of
-  `.git/*`, `.gitignore` and `.github/*` files.
-- The `gleam new` command gains the `--skip-github` flag to skip creation of
-  `.github/*` files.
-
+- Fixed `int` and `float` formatting in `const`s and patterns.
+- Fixed a bug where piping into a function capture expression with a pipe as one
+  of the arguments would produce invalid Erlang code.
+- Formatter no longer removes new lines in expression blocks within case branches
 
 ## v0.25.3 - 2022-12-16
 
@@ -91,12 +195,11 @@
 - Fixed a bug where `try` expressions inside blocks could generate incorrect
   JavaScript.
 - Generated HTML documentation now includes all static assets (but the web
-  fonts), so that it can be accessed offline or in far future once CDNs would
-  404.
+  fonts), so that it can be accessed offline or in far future once CDNs would 404.
 - New Gleam projects are created using GitHub actions erlef/setup-beam@v1.14.0
 - The `javascript.typescript_declarations` field in `gleam.toml` now applies to
   the entire project rather than just the top level package.
-- The formatter now adds a 0 to floats ending with `.` (ie 1. => 1.0).
+- The formatter now adds a `0` to floats ending with `.` (ie `1.` => `1.0`).
 - New projects require `gleam_stdlib` v0.25.
 
 ## 0.24.0 - 2022-10-25

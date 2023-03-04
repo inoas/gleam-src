@@ -1,5 +1,5 @@
 use gleam_core::{
-    build::{Mode, Options, Target},
+    build::{Codegen, Mode, Options, Target},
     error::Error,
     paths,
 };
@@ -8,7 +8,7 @@ use std::process::Command;
 pub fn command() -> Result<(), Error> {
     // Build project
     let _ = crate::build::main(Options {
-        perform_codegen: true,
+        codegen: Codegen::All,
         mode: Mode::Dev,
         target: Some(Target::Erlang),
     })?;
@@ -33,7 +33,7 @@ pub fn command() -> Result<(), Error> {
     // Run the shell
     tracing::info!("Running OS process {:?}", command);
     let _ = command.status().map_err(|e| Error::ShellCommand {
-        program: "erl".to_string(),
+        program: "erl".into(),
         err: Some(e.kind()),
     })?;
     Ok(())

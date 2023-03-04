@@ -1,6 +1,7 @@
 #![allow(warnings)]
 
 mod dep_tree;
+mod module_loader;
 mod native_file_copier;
 pub mod package_compiler;
 mod package_loader;
@@ -14,7 +15,7 @@ pub use self::package_compiler::PackageCompiler;
 pub use self::project_compiler::{Options, ProjectCompiler};
 pub use self::telemetry::Telemetry;
 
-use crate::ast::{DefinitionLocation, TypedExpr, TypedStatement};
+use crate::ast::{CustomType, DefinitionLocation, TypedExpr, TypedStatement};
 use crate::{
     ast::{SrcSpan, Statement, TypedModule},
     config::{self, PackageConfig},
@@ -26,14 +27,25 @@ use crate::{
 };
 use itertools::Itertools;
 use serde::{Deserialize, Serialize};
+use smol_str::SmolStr;
 use std::time::SystemTime;
 use std::{
     collections::HashMap, ffi::OsString, fs::DirEntry, iter::Peekable, path::PathBuf, process,
 };
-use strum::{Display, EnumString, EnumVariantNames, VariantNames};
+use strum::{Display, EnumIter, EnumString, EnumVariantNames, VariantNames};
 
 #[derive(
-    Debug, Serialize, Deserialize, Display, EnumString, EnumVariantNames, Clone, Copy, PartialEq,
+    Debug,
+    Serialize,
+    Deserialize,
+    Display,
+    EnumString,
+    EnumVariantNames,
+    EnumIter,
+    Clone,
+    Copy,
+    PartialEq,
+    Eq,
 )]
 #[strum(serialize_all = "lowercase")]
 pub enum Target {
@@ -44,8 +56,43 @@ pub enum Target {
 }
 
 impl Target {
-    pub fn variant_strings() -> Vec<String> {
-        Self::VARIANTS.iter().map(|s| s.to_string()).collect()
+    pub fn variant_strings() -> Vec<SmolStr> {
+        Self::VARIANTS.iter().map(|s| (*s).into()).collect()
+    }
+}
+
+#[derive(Debug, PartialEq, Eq, Clone, Copy)]
+pub enum Codegen {
+    All,
+    DepsOnly,
+    None,
+}
+
+impl Codegen {
+    fn should_codegen(&self, is_root_package: bool) -> bool {
+        match self {
+            Codegen::All => true,
+            Codegen::DepsOnly => !is_root_package,
+            Codegen::None => false,
+        }
+    }
+}
+
+#[derive(
+    Debug, Serialize, Deserialize, Display, EnumString, EnumVariantNames, Clone, Copy, PartialEq,
+)]
+pub enum Runtime {
+    #[strum(serialize = "nodejs", serialize = "node")]
+    #[serde(rename = "nodejs", alias = "node")]
+    NodeJs,
+    #[strum(serialize = "deno")]
+    #[serde(rename = "deno")]
+    Deno,
+}
+
+impl Default for Runtime {
+    fn default() -> Self {
+        Self::NodeJs
     }
 }
 
@@ -74,7 +121,16 @@ pub struct ErlangAppCodegenConfiguration {
 }
 
 #[derive(
-    Debug, Serialize, Deserialize, Display, EnumString, EnumVariantNames, Clone, Copy, PartialEq,
+    Debug,
+    Serialize,
+    Deserialize,
+    Display,
+    EnumString,
+    EnumVariantNames,
+    EnumIter,
+    Clone,
+    Copy,
+    PartialEq,
 )]
 #[strum(serialize_all = "lowercase")]
 pub enum Mode {
@@ -84,12 +140,21 @@ pub enum Mode {
 }
 
 impl Mode {
-    /// Returns `true` if the mode is [`Dev`].
+    /// Returns `true` if the mode includes test code.
     ///
-    /// [`Dev`]: Mode::Dev
-    pub fn is_dev(&self) -> bool {
-        matches!(self, Self::Dev)
+    pub fn includes_tests(&self) -> bool {
+        match self {
+            Self::Dev | Self::Lsp => true,
+            Self::Prod => false,
+        }
     }
+}
+
+#[test]
+fn mode_includes_tests() {
+    assert!(Mode::Dev.includes_tests());
+    assert!(Mode::Lsp.includes_tests());
+    assert!(!Mode::Prod.includes_tests());
 }
 
 #[derive(Debug)]
@@ -115,14 +180,14 @@ impl Package {
 
 #[derive(Debug)]
 pub struct Module {
-    pub name: String,
-    pub code: String,
+    pub name: SmolStr,
+    pub code: SmolStr,
     pub mtime: SystemTime,
     pub input_path: PathBuf,
     pub origin: Origin,
     pub ast: TypedModule,
     pub extra: ModuleExtra,
-    pub dependencies: Vec<(String, SrcSpan)>,
+    pub dependencies: Vec<(SmolStr, SrcSpan)>,
 }
 
 impl Module {
@@ -146,11 +211,7 @@ impl Module {
             .extra
             .module_comments
             .iter()
-            .map(|span| {
-                Comment::from((span, self.code.as_str()))
-                    .content
-                    .to_string()
-            })
+            .map(|span| Comment::from((span, self.code.as_str())).content.into())
             .collect();
 
         // Order statements to avoid dissociating doc comments from them
@@ -163,16 +224,16 @@ impl Module {
             let docs: Vec<&str> =
                 comments_before(&mut doc_comments, statement.location().start, &self.code);
             if !docs.is_empty() {
-                let doc = docs.join("\n");
+                let doc = docs.join("\n").into();
                 statement.put_doc(doc);
             }
 
-            if let Statement::CustomType { constructors, .. } = statement {
+            if let Statement::CustomType(CustomType { constructors, .. }) = statement {
                 for constructor in constructors {
                     let docs: Vec<&str> =
                         comments_before(&mut doc_comments, constructor.location.start, &self.code);
                     if !docs.is_empty() {
-                        let doc = docs.join("\n");
+                        let doc = docs.join("\n").into();
                         constructor.put_doc(doc);
                     }
 
@@ -180,7 +241,7 @@ impl Module {
                         let docs: Vec<&str> =
                             comments_before(&mut doc_comments, argument.location.start, &self.code);
                         if !docs.is_empty() {
-                            let doc = docs.join("\n");
+                            let doc = docs.join("\n").into();
                             argument.put_doc(doc);
                         }
                     }
@@ -189,10 +250,10 @@ impl Module {
         }
     }
 
-    pub(crate) fn dependencies_list(&self) -> Vec<String> {
+    pub(crate) fn dependencies_list(&self) -> Vec<SmolStr> {
         self.dependencies
             .iter()
-            .map(|(name, _)| name.to_string())
+            .map(|(name, _)| name.clone())
             .collect()
     }
 }
@@ -215,7 +276,7 @@ impl<'a> Located<'a> {
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Origin {
     Src,
     Test,

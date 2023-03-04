@@ -3,24 +3,24 @@ use crate::type_::{bool, HasType, Type};
 
 use lazy_static::lazy_static;
 
-#[derive(Debug, PartialEq, Clone)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum TypedExpr {
     Int {
         location: SrcSpan,
         typ: Arc<Type>,
-        value: String,
+        value: SmolStr,
     },
 
     Float {
         location: SrcSpan,
         typ: Arc<Type>,
-        value: String,
+        value: SmolStr,
     },
 
     String {
         location: SrcSpan,
         typ: Arc<Type>,
-        value: String,
+        value: SmolStr,
     },
 
     Sequence {
@@ -41,7 +41,7 @@ pub enum TypedExpr {
     Var {
         location: SrcSpan,
         constructor: ValueConstructor,
-        name: String,
+        name: SmolStr,
     },
 
     Fn {
@@ -95,13 +95,13 @@ pub enum TypedExpr {
         location: SrcSpan,
         typ: Arc<Type>,
         subjects: Vec<Self>,
-        clauses: Vec<Clause<Self, PatternConstructor, Arc<Type>, String>>,
+        clauses: Vec<Clause<Self, PatternConstructor, Arc<Type>, SmolStr>>,
     },
 
     RecordAccess {
         location: SrcSpan,
         typ: Arc<Type>,
-        label: String,
+        label: SmolStr,
         index: u64,
         record: Box<Self>,
     },
@@ -109,9 +109,9 @@ pub enum TypedExpr {
     ModuleSelect {
         location: SrcSpan,
         typ: Arc<Type>,
-        label: String,
-        module_name: String,
-        module_alias: String,
+        label: SmolStr,
+        module_name: SmolStr,
+        module_alias: SmolStr,
         constructor: ModuleValueConstructor,
     },
 
@@ -130,7 +130,12 @@ pub enum TypedExpr {
 
     Todo {
         location: SrcSpan,
-        label: Option<String>,
+        label: Option<SmolStr>,
+        typ: Arc<Type>,
+    },
+
+    Panic {
+        location: SrcSpan,
         typ: Arc<Type>,
     },
 
@@ -165,6 +170,7 @@ impl TypedExpr {
             Self::Var { .. }
             | Self::Int { .. }
             | Self::Todo { .. }
+            | Self::Panic { .. }
             | Self::Float { .. }
             | Self::String { .. }
             | Self::ModuleSelect { .. } => Some(self),
@@ -262,6 +268,7 @@ impl TypedExpr {
             | Self::Float { location, .. }
             | Self::BinOp { location, .. }
             | Self::Tuple { location, .. }
+            | Self::Panic { location, .. }
             | Self::String { location, .. }
             | Self::Negate { location, .. }
             | Self::Sequence { location, .. }
@@ -289,6 +296,7 @@ impl TypedExpr {
             | Self::BinOp { location, .. }
             | Self::Tuple { location, .. }
             | Self::String { location, .. }
+            | Self::Panic { location, .. }
             | Self::Negate { location, .. }
             | Self::Pipeline { location, .. }
             | Self::BitString { location, .. }
@@ -323,6 +331,7 @@ impl TypedExpr {
             | TypedExpr::Call { .. }
             | TypedExpr::Case { .. }
             | TypedExpr::Todo { .. }
+            | TypedExpr::Panic { .. }
             | TypedExpr::BinOp { .. }
             | TypedExpr::Float { .. }
             | TypedExpr::Tuple { .. }
@@ -366,6 +375,7 @@ impl TypedExpr {
             | Self::List { typ, .. }
             | Self::Call { typ, .. }
             | Self::Float { typ, .. }
+            | Self::Panic { typ, .. }
             | Self::BinOp { typ, .. }
             | Self::Tuple { typ, .. }
             | Self::String { typ, .. }
@@ -392,6 +402,14 @@ impl TypedExpr {
                 | Self::String { .. }
                 | Self::BitString { .. }
         )
+    }
+
+    /// Returns `true` if the typed expr is [`Var`].
+    ///
+    /// [`Var`]: TypedExpr::Var
+    #[must_use]
+    pub fn is_var(&self) -> bool {
+        matches!(self, Self::Var { .. })
     }
 }
 

@@ -4,9 +4,14 @@ assertion_line: 39
 expression: "\npub fn main() {\n  use <- trip(1.0, \"\")\n  123\n}\n\nfn trip(x, y, f) {\n  let z = f()\n  #(x, y, z)\n}\n"
 ---
 -module(the_app).
--compile(no_auto_import).
+-compile([no_auto_import, nowarn_unused_vars]).
 
 -export([main/0]).
+
+-spec trip(J, K, fun(() -> N)) -> {J, K, N}.
+trip(X, Y, F) ->
+    Z = F(),
+    {X, Y, Z}.
 
 -spec main() -> {float(), binary(), integer()}.
 main() ->
@@ -17,11 +22,4 @@ main() ->
             123
         end
     ).
-
--spec trip(float(), binary(), fun(() -> integer())) -> {float(),
-    binary(),
-    integer()}.
-trip(X, Y, F) ->
-    Z = F(),
-    {X, Y, Z}.
 

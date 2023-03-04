@@ -4,7 +4,7 @@ assertion_line: 6
 expression: "\npub fn myfun(mt) {\n  case mt {\n    1 | _ ->\n      1\n      |> Ok\n  }\n  1\n  |> Ok\n}\n"
 ---
 -module(the_app).
--compile(no_auto_import).
+-compile([no_auto_import, nowarn_unused_vars]).
 
 -export([myfun/1]).
 
@@ -15,7 +15,7 @@ myfun(Mt) ->
             _pipe = 1,
             {ok, _pipe};
 
-        _@1 ->
+        _ ->
             _pipe = 1,
             {ok, _pipe}
     end,

@@ -2,7 +2,7 @@ use std::time::Instant;
 
 use crate::{cli, hex::ApiKeyCommand, http::HttpClient};
 use gleam_core::{
-    build::{Mode, Options, Package},
+    build::{Codegen, Mode, Options, Package},
     config::{DocsPage, PackageConfig},
     error::Error,
     hex,
@@ -51,11 +51,15 @@ impl ApiKeyCommand for RemoveCommand {
 
 pub fn build() -> Result<()> {
     let config = crate::config::root_config()?;
+
+    // Reset the build directory so we know the state of the project
+    crate::fs::delete_dir(&paths::build_packages(Mode::Prod, config.target))?;
+
     let out = paths::build_docs(&config.name);
     let mut compiled = crate::build::main(Options {
         mode: Mode::Prod,
         target: None,
-        perform_codegen: true,
+        codegen: Codegen::All,
     })?;
     let outputs = build_documentation(&config, &mut compiled)?;
 
@@ -80,8 +84,8 @@ pub(crate) fn build_documentation(
     compiled.attach_doc_and_module_comments();
     cli::print_generating_documentation();
     let mut pages = vec![DocsPage {
-        title: "README".to_string(),
-        path: "index.html".to_string(),
+        title: "README".into(),
+        path: "index.html".into(),
         source: paths::readme(), // TODO: support non markdown READMEs. Or a default if there is none.
     }];
     pages.extend(config.documentation.pages.iter().cloned());
@@ -101,9 +105,13 @@ pub fn publish() -> Result<()> {
 impl PublishCommand {
     pub fn new() -> Result<Self> {
         let config = crate::config::root_config()?;
+
+        // Reset the build directory so we know the state of the project
+        crate::fs::delete_dir(&paths::build_packages(Mode::Prod, config.target))?;
+
         let mut compiled = crate::build::main(Options {
-            perform_codegen: true,
-            mode: Mode::Dev,
+            codegen: Codegen::All,
+            mode: Mode::Prod,
             target: None,
         })?;
         let outputs = build_documentation(&config, &mut compiled)?;

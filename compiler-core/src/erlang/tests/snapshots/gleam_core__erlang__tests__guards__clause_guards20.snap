@@ -4,7 +4,7 @@ assertion_line: 161
 expression: "\npub fn main() {\n  let x = 0.123\n  case x {\n    _ if 0.123 <. x -> 1\n  }\n}\n"
 ---
 -module(the_app).
--compile(no_auto_import).
+-compile([no_auto_import, nowarn_unused_vars]).
 
 -export([main/0]).
 
@@ -12,7 +12,7 @@ expression: "\npub fn main() {\n  let x = 0.123\n  case x {\n    _ if 0.123 <. x
 main() ->
     X = 0.123,
     case X of
-        _@1 when 0.123 < X ->
+        _ when 0.123 < X ->
             1
     end.
 

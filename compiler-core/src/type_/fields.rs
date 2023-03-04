@@ -1,12 +1,13 @@
 use super::Error;
 use crate::ast::{CallArg, SrcSpan};
 use itertools::Itertools;
+use smol_str::SmolStr;
 use std::collections::{HashMap, HashSet};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct FieldMap {
     pub arity: u32,
-    pub fields: HashMap<String, u32>,
+    pub fields: HashMap<SmolStr, u32>,
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -20,7 +21,7 @@ impl FieldMap {
         }
     }
 
-    pub fn insert(&mut self, label: String, index: u32) -> Result<(), DuplicateField> {
+    pub fn insert(&mut self, label: SmolStr, index: u32) -> Result<(), DuplicateField> {
         match self.fields.insert(label, index) {
             Some(_) => Err(DuplicateField),
             None => Ok(()),
@@ -106,7 +107,7 @@ impl FieldMap {
                 if seen_labels.contains(label) {
                     return Err(Error::DuplicateArgument {
                         location,
-                        label: label.to_string(),
+                        label: label.clone(),
                     });
                 }
                 let _ = seen_labels.insert(label.clone());
@@ -119,14 +120,14 @@ impl FieldMap {
             Ok(())
         } else {
             Err(Error::UnknownLabels {
-                valid: self.fields.keys().map(|t| t.to_string()).collect(),
+                valid: self.fields.keys().cloned().collect(),
                 unknown: unknown_labels,
                 supplied: seen_labels.into_iter().collect(),
             })
         }
     }
 
-    pub fn incorrect_arity_labels<A>(&self, args: &[CallArg<A>]) -> Vec<String> {
+    pub fn incorrect_arity_labels<A>(&self, args: &[CallArg<A>]) -> Vec<SmolStr> {
         let given: HashSet<_> = args.iter().filter_map(|arg| arg.label.as_ref()).collect();
 
         self.fields
@@ -135,5 +136,53 @@ impl FieldMap {
             .filter(|f| !given.contains(f))
             .sorted()
             .collect()
+    }
+}
+
+#[derive(Debug)]
+pub struct FieldMapBuilder {
+    index: u32,
+    any_labels: bool,
+    field_map: FieldMap,
+}
+
+impl FieldMapBuilder {
+    pub fn new(size: u32) -> Self {
+        Self {
+            index: 0,
+            any_labels: false,
+            field_map: FieldMap::new(size),
+        }
+    }
+
+    pub fn add(&mut self, label: Option<&SmolStr>, location: SrcSpan) -> Result<(), Error> {
+        match label {
+            Some(label) => self.labelled(label, location)?,
+            None => self.unlabelled(location)?,
+        }
+        self.index += 1;
+        Ok(())
+    }
+
+    fn labelled(&mut self, label: &SmolStr, location: SrcSpan) -> Result<(), Error> {
+        if self.field_map.insert(label.clone(), self.index).is_err() {
+            return Err(Error::DuplicateField {
+                label: label.clone(),
+                location,
+            });
+        };
+        self.any_labels = true;
+        Ok(())
+    }
+
+    fn unlabelled(&mut self, location: SrcSpan) -> Result<(), Error> {
+        if self.any_labels {
+            return Err(Error::UnlabelledAfterlabelled { location });
+        }
+        Ok(())
+    }
+
+    pub fn finish(self) -> Option<FieldMap> {
+        self.field_map.into_option()
     }
 }

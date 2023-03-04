@@ -3,7 +3,10 @@ mod source_links;
 use std::{path::PathBuf, time::SystemTime};
 
 use crate::{
-    ast::{Statement, TypedStatement},
+    ast::{
+        CustomType, ExternalFunction, ExternalType, Function, ModuleConstant, Statement, TypeAlias,
+        TypedStatement,
+    },
     build::Module,
     config::{DocsPage, PackageConfig},
     docs::source_links::SourceLinker,
@@ -16,6 +19,7 @@ use askama::Template;
 use itertools::Itertools;
 use serde::Serialize;
 use serde_json::to_string as serde_to_string;
+use smol_str::SmolStr;
 use voca_rs::manipulate;
 use voca_rs::Voca;
 
@@ -27,7 +31,11 @@ pub fn generate_html(
     analysed: &[Module],
     docs_pages: &[DocsPage],
 ) -> Vec<OutputFile> {
-    let modules = analysed.iter().filter(|module| !module.is_test());
+    let modules = analysed
+        .iter()
+        .filter(|module| !module.is_test())
+        .filter(|module| !config.is_internal_module(&module.name));
+
     let rendering_timestamp = SystemTime::now()
         .duration_since(SystemTime::UNIX_EPOCH)
         .expect("get current timestamp")
@@ -49,7 +57,7 @@ pub fn generate_html(
     });
 
     let repo_link = config.repository.url().map(|path| Link {
-        name: "Repository".to_string(),
+        name: "Repository".into(),
         path,
     });
 
@@ -82,7 +90,7 @@ pub fn generate_html(
             pages: &pages,
             modules: &modules_links,
             project_name: &config.name,
-            page_title: &config.name,
+            page_title: &format!("{} · v{}", config.name, config.version),
             page_meta_description: &config.description,
             project_version: &config.version.to_string(),
             content: render_markdown(&content),
@@ -111,9 +119,9 @@ pub fn generate_html(
         // Read module src & create line number lookup structure
         let source_links = SourceLinker::new(config, module);
 
-        let page_title = format!("{} · {}", name, config.name);
+        let page_title = format!("{} · {} · {}", name, config.name, config.version);
 
-        let functions: Vec<Function<'_>> = module
+        let functions: Vec<DocsFunction<'_>> = module
             .ast
             .statements
             .iter()
@@ -416,7 +424,7 @@ fn page_unnest(path: &str) -> String {
         .map(|_| "..")
         .join("/");
     if unnest.is_empty() {
-        ".".to_string()
+        ".".into()
     } else {
         unnest
     }
@@ -457,17 +465,17 @@ fn escape_html_contents(indexes: Vec<SearchIndex>) -> Vec<SearchIndex> {
 }
 
 fn import_synonyms(parent: &str, child: &str) -> String {
-    format!("Synonyms:\n{}.{}\n{} {}", parent, child, parent, child)
+    format!("Synonyms:\n{parent}.{child}\n{parent} {child}")
 }
 
 fn function<'a>(
     source_links: &SourceLinker,
     statement: &'a TypedStatement,
-) -> Option<Function<'a>> {
+) -> Option<DocsFunction<'a>> {
     let mut formatter = format::Formatter::new();
 
     match statement {
-        Statement::ExternalFn {
+        Statement::ExternalFunction(ExternalFunction {
             public: true,
             name,
             doc,
@@ -475,7 +483,7 @@ fn function<'a>(
             arguments: args,
             location,
             ..
-        } => Some(Function {
+        }) => Some(DocsFunction {
             name,
             documentation: markdown_documentation(doc),
             text_documentation: text_documentation(doc),
@@ -483,7 +491,7 @@ fn function<'a>(
             source_url: source_links.url(location),
         }),
 
-        Statement::Fn {
+        Statement::Function(Function {
             public: true,
             name,
             doc,
@@ -491,7 +499,7 @@ fn function<'a>(
             return_type: ret,
             location,
             ..
-        } => Some(Function {
+        }) => Some(DocsFunction {
             name,
             documentation: markdown_documentation(doc),
             text_documentation: text_documentation(doc),
@@ -503,17 +511,17 @@ fn function<'a>(
     }
 }
 
-fn text_documentation(doc: &Option<String>) -> String {
+fn text_documentation(doc: &Option<SmolStr>) -> String {
     let raw_text = doc
         .as_ref()
         .map(|it| it.to_string())
-        .unwrap_or_else(|| "".to_string());
+        .unwrap_or_else(|| "".into());
 
     // TODO: parse markdown properly and extract the text nodes
     raw_text.replace("```gleam", "").replace("```", "")
 }
 
-fn markdown_documentation(doc: &Option<String>) -> String {
+fn markdown_documentation(doc: &Option<SmolStr>) -> String {
     doc.as_deref().map(render_markdown).unwrap_or_default()
 }
 
@@ -528,14 +536,13 @@ fn type_<'a>(source_links: &SourceLinker, statement: &'a TypedStatement) -> Opti
     let mut formatter = format::Formatter::new();
 
     match statement {
-        Statement::ExternalType {
+        Statement::ExternalType(ExternalType {
             public: true,
             name,
             doc,
             arguments: args,
             location,
-            ..
-        } => Some(Type {
+        }) => Some(Type {
             name,
             definition: print(formatter.external_type(true, name, args)),
             documentation: markdown_documentation(doc),
@@ -544,7 +551,7 @@ fn type_<'a>(source_links: &SourceLinker, statement: &'a TypedStatement) -> Opti
             source_url: source_links.url(location),
         }),
 
-        Statement::CustomType {
+        Statement::CustomType(CustomType {
             public: true,
             opaque: false,
             name,
@@ -553,7 +560,7 @@ fn type_<'a>(source_links: &SourceLinker, statement: &'a TypedStatement) -> Opti
             constructors: cs,
             location,
             ..
-        } => Some(Type {
+        }) => Some(Type {
             name,
             // TODO: Don't use the same printer for docs as for the formatter.
             // We are not interested in showing the exact implementation in the
@@ -582,7 +589,7 @@ fn type_<'a>(source_links: &SourceLinker, statement: &'a TypedStatement) -> Opti
             source_url: source_links.url(location),
         }),
 
-        Statement::CustomType {
+        Statement::CustomType(CustomType {
             public: true,
             opaque: true,
             name,
@@ -590,7 +597,7 @@ fn type_<'a>(source_links: &SourceLinker, statement: &'a TypedStatement) -> Opti
             doc,
             location,
             ..
-        } => Some(Type {
+        }) => Some(Type {
             name,
             definition: print(formatter.docs_opaque_custom_type(true, name, parameters, location)),
             documentation: markdown_documentation(doc),
@@ -599,7 +606,7 @@ fn type_<'a>(source_links: &SourceLinker, statement: &'a TypedStatement) -> Opti
             source_url: source_links.url(location),
         }),
 
-        Statement::TypeAlias {
+        Statement::TypeAlias(TypeAlias {
             public: true,
             alias: name,
             type_ast: typ,
@@ -607,7 +614,7 @@ fn type_<'a>(source_links: &SourceLinker, statement: &'a TypedStatement) -> Opti
             parameters: args,
             location,
             ..
-        } => Some(Type {
+        }) => Some(Type {
             name,
             definition: print(formatter.type_alias(true, name, args, typ)),
             documentation: markdown_documentation(doc),
@@ -626,14 +633,14 @@ fn constant<'a>(
 ) -> Option<Constant<'a>> {
     let mut formatter = format::Formatter::new();
     match statement {
-        Statement::ModuleConstant {
+        Statement::ModuleConstant(ModuleConstant {
             public: true,
             doc,
             name,
             value,
             location,
             ..
-        } => Some(Constant {
+        }) => Some(Constant {
             name,
             definition: print(formatter.docs_const_expr(true, name, value)),
             documentation: markdown_documentation(doc),
@@ -656,7 +663,7 @@ struct Link {
 }
 
 #[derive(PartialEq, Eq, PartialOrd, Ord)]
-struct Function<'a> {
+struct DocsFunction<'a> {
     name: &'a str,
     signature: String,
     documentation: String,
@@ -720,13 +727,13 @@ struct ModuleTemplate<'a> {
     unnest: String,
     page_title: &'a str,
     page_meta_description: &'a str,
-    module_name: String,
+    module_name: SmolStr,
     project_name: &'a str,
     project_version: &'a str,
     pages: &'a [Link],
     links: &'a [Link],
     modules: &'a [Link],
-    functions: Vec<Function<'a>>,
+    functions: Vec<DocsFunction<'a>>,
     types: Vec<Type<'a>>,
     constants: Vec<Constant<'a>>,
     documentation: String,

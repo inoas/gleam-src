@@ -35,7 +35,7 @@ pub fn resolve_versions(
     tracing::info!("resolving_versions");
     hexpm::version::resolve_versions(
         package_fetcher,
-        config.name.clone(),
+        config.name.to_string(),
         specified_dependencies,
         &locked,
     )
@@ -43,7 +43,7 @@ pub fn resolve_versions(
 }
 
 fn key_name(hostname: &str) -> String {
-    format!("gleam-{}", hostname)
+    format!("gleam-{hostname}")
 }
 
 pub async fn publish_package<Http: HttpClient>(
@@ -53,7 +53,7 @@ pub async fn publish_package<Http: HttpClient>(
     replace: bool,
     http: &Http,
 ) -> Result<()> {
-    tracing::info!("Creating API key with Hex");
+    tracing::info!("Publishing package, replace: {}", replace);
     let request = hexpm::publish_package_request(release_tarball, api_key, config, replace);
     let response = http.send(request).await?;
     hexpm::publish_package_response(response).map_err(Error::hex)
@@ -253,7 +253,7 @@ impl Downloader {
         }
 
         Err(Error::ExpandTar {
-            error: "Unable to locate Hex package contents.tar.gz".to_string(),
+            error: "Unable to locate Hex package contents.tar.gz".into(),
         })
     }
 

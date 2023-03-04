@@ -8,8 +8,12 @@ use std::{
 };
 
 use crate::{
-    build_lock::BuildLock, dependencies::UseManifest, fs::ProjectIO, telemetry::NullTelemetry,
+    build_lock::BuildLock,
+    dependencies::UseManifest,
+    fs::{self, ProjectIO},
+    telemetry::NullTelemetry,
 };
+use gleam_core::{ast::Import, build::Mode};
 use gleam_core::{
     ast::{SrcSpan, Statement},
     build::{self, Located, Module, ProjectCompiler},
@@ -31,6 +35,7 @@ use lsp_types::{
     HoverContents, HoverProviderCapability, InitializeParams, MarkedString, Position,
     PublishDiagnosticsParams, Range, TextEdit, Url,
 };
+use smol_str::SmolStr;
 #[cfg(target_os = "windows")]
 use urlencoding::decode;
 
@@ -150,7 +155,7 @@ pub struct LanguageServer {
     project_root: PathBuf,
 
     /// Files that have been edited in memory
-    edited: HashMap<String, String>,
+    edited: HashMap<String, SmolStr>,
 
     /// Diagnostics that have been emitted by the compiler but not yet published
     /// to the client
@@ -540,7 +545,7 @@ impl LanguageServer {
         // A file has changed in the editor so store a copy of the new content in memory
         let path = params.text_document.uri.path().to_string();
         if let Some(changes) = params.content_changes.into_iter().next() {
-            let _ = self.edited.insert(path, changes.text);
+            let _ = self.edited.insert(path, changes.text.into());
         }
         Ok(())
     }
@@ -643,7 +648,7 @@ impl LanguageServer {
 
         match found {
             // TODO: test
-            None | Some(Located::Statement(Statement::Import { .. })) => {
+            None | Some(Located::Statement(Statement::Import(Import { .. }))) => {
                 self.completion_for_import()
             }
 
@@ -662,7 +667,7 @@ impl LanguageServer {
             .project_compiler
             .get_importable_modules()
             .keys()
-            .cloned();
+            .map(|name| name.to_string());
         // TODO: Test
         let project_modules = compiler
             .modules
@@ -701,9 +706,8 @@ impl LanguageServer {
         let type_ = Printer::new().pretty_print(expression.type_().as_ref(), 0);
         let contents = format!(
             "```gleam
-{}
-```",
-            type_
+{type_}
+```"
         );
         Ok(Some(Hover {
             contents: HoverContents::Scalar(MarkedString::String(contents)),
@@ -736,20 +740,35 @@ impl LanguageServer {
         let path = params.text_document.uri.path();
         let mut new_text = String::new();
 
-        match self.edited.get(path) {
+        let line_count = match self.edited.get(path) {
             // If we have a cached version of the file in memory format that
             Some(src) => {
                 gleam_core::format::pretty(&mut new_text, src, Path::new(path))?;
+                src.lines().count() as u32
             }
 
             // Otherwise format the file from disc
             None => {
-                let src = crate::fs::read(path)?;
+                let src = crate::fs::read(path)?.into();
                 gleam_core::format::pretty(&mut new_text, &src, Path::new(path))?;
+                src.lines().count() as u32
             }
         };
 
-        Ok(vec![text_edit_replace(new_text)])
+        let edit = TextEdit {
+            range: Range {
+                start: Position {
+                    line: 0,
+                    character: 0,
+                },
+                end: Position {
+                    line: line_count,
+                    character: 0,
+                },
+            },
+            new_text,
+        };
+        Ok(vec![edit])
     }
 }
 
@@ -851,22 +870,6 @@ where
 {
     let params = notification.extract::<N::Params>(N::METHOD)?;
     Ok(params)
-}
-
-fn text_edit_replace(new_text: String) -> TextEdit {
-    TextEdit {
-        range: Range {
-            start: Position {
-                line: 0,
-                character: 0,
-            },
-            end: Position {
-                line: u32::MAX,
-                character: 0,
-            },
-        },
-        new_text,
-    }
 }
 
 fn result_to_response(
@@ -998,14 +1001,16 @@ where
     IO: CommandExecutor + FileSystemIO + Clone,
 {
     pub fn new(config: PackageConfig, io: IO) -> Result<Self> {
-        // TODO: different telemetry that doesn't write to stdout
         let telemetry = NullTelemetry;
         let manifest = crate::dependencies::download(telemetry, None, UseManifest::Yes)?;
+        let target = config.target;
+        let name = config.name.clone();
+        let build_lock = BuildLock::new_target(Mode::Lsp, target)?;
 
         let options = build::Options {
             mode: build::Mode::Lsp,
             target: None,
-            perform_codegen: false,
+            codegen: build::Codegen::None,
         };
         let mut project_compiler =
             ProjectCompiler::new(config, options, manifest.packages, Box::new(telemetry), io);
@@ -1014,11 +1019,20 @@ where
         // violating LSP which is currently using stdout) we silence it.
         project_compiler.subprocess_stdio = Stdio::Null;
 
+        // The build caches do not contain all the information we need in the
+        // LSP (e.g. the typed AST) so delete the caches for the top level
+        // package before we run for the first time.
+        // TODO: remove this once the caches have contain all the information
+        {
+            let _guard = build_lock.lock(&telemetry);
+            fs::delete_dir(&paths::build_package(Mode::Lsp, target, &name))?;
+        }
+
         Ok(Self {
             project_compiler,
             modules: HashMap::new(),
             sources: HashMap::new(),
-            build_lock: BuildLock::new()?,
+            build_lock,
             dependencies_compiled: false,
         })
     }
@@ -1053,8 +1067,8 @@ where
             let path = path.as_os_str().to_string_lossy().to_string();
             let line_numbers = LineNumbers::new(&module.code);
             let source = ModuleSourceInformation { path, line_numbers };
-            let _ = self.sources.insert(module.name.clone(), source);
-            let _ = self.modules.insert(module.name.clone(), module);
+            let _ = self.sources.insert(module.name.to_string(), source);
+            let _ = self.modules.insert(module.name.to_string(), module);
         }
 
         Ok(())

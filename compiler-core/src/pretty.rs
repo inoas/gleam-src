@@ -17,6 +17,7 @@
 mod tests;
 
 use itertools::Itertools;
+use smol_str::SmolStr;
 
 use crate::{io::Utf8Writer, Result};
 
@@ -40,7 +41,7 @@ pub trait Documentable<'a> {
 
 impl<'a> Documentable<'a> for char {
     fn to_doc(self) -> Document<'a> {
-        Document::String(format!("{}", self))
+        Document::String(format!("{self}"))
     }
 }
 
@@ -50,51 +51,63 @@ impl<'a> Documentable<'a> for &'a str {
     }
 }
 
+impl<'a> Documentable<'a> for SmolStr {
+    fn to_doc(self) -> Document<'a> {
+        Document::SmolStr(self)
+    }
+}
+
+impl<'a> Documentable<'a> for &SmolStr {
+    fn to_doc(self) -> Document<'a> {
+        Document::SmolStr(self.clone())
+    }
+}
+
 impl<'a> Documentable<'a> for isize {
     fn to_doc(self) -> Document<'a> {
-        Document::String(format!("{}", self))
+        Document::String(format!("{self}"))
     }
 }
 
 impl<'a> Documentable<'a> for i64 {
     fn to_doc(self) -> Document<'a> {
-        Document::String(format!("{}", self))
+        Document::String(format!("{self}"))
     }
 }
 
 impl<'a> Documentable<'a> for usize {
     fn to_doc(self) -> Document<'a> {
-        Document::String(format!("{}", self))
+        Document::String(format!("{self}"))
     }
 }
 
 impl<'a> Documentable<'a> for f64 {
     fn to_doc(self) -> Document<'a> {
-        Document::String(format!("{:?}", self))
+        Document::String(format!("{self:?}"))
     }
 }
 
 impl<'a> Documentable<'a> for u64 {
     fn to_doc(self) -> Document<'a> {
-        Document::String(format!("{:?}", self))
+        Document::String(format!("{self:?}"))
     }
 }
 
 impl<'a> Documentable<'a> for u32 {
     fn to_doc(self) -> Document<'a> {
-        Document::String(format!("{}", self))
+        Document::String(format!("{self}"))
     }
 }
 
 impl<'a> Documentable<'a> for u16 {
     fn to_doc(self) -> Document<'a> {
-        Document::String(format!("{}", self))
+        Document::String(format!("{self}"))
     }
 }
 
 impl<'a> Documentable<'a> for u8 {
     fn to_doc(self) -> Document<'a> {
-        Document::String(format!("{}", self))
+        Document::String(format!("{self}"))
     }
 }
 
@@ -159,6 +172,9 @@ pub enum Document<'a> {
 
     /// A str to render
     Str(&'a str),
+
+    /// A string that is cheap to copy
+    SmolStr(SmolStr),
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -211,6 +227,7 @@ fn fits(
 
             Document::Str(s) => limit -= s.len() as isize,
             Document::String(s) => limit -= s.len() as isize,
+            Document::SmolStr(s) => limit -= s.len() as isize,
 
             Document::Break { unbroken, .. } => match mode {
                 Mode::Broken | Mode::ForcedBroken => return true,
@@ -297,6 +314,11 @@ fn format(
             }
 
             Document::String(s) => {
+                width += s.len() as isize;
+                writer.str_write(s)?;
+            }
+
+            Document::SmolStr(s) => {
                 width += s.len() as isize;
                 writer.str_write(s)?;
             }
@@ -407,6 +429,7 @@ impl<'a> Document<'a> {
         use Document::*;
         match self {
             Line(n) => *n == 0,
+            SmolStr(s) => s.is_empty(),
             String(s) => s.is_empty(),
             Str(s) => s.is_empty(),
             // assuming `broken` and `unbroken` are equivalent

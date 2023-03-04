@@ -16,6 +16,8 @@ use gleam_core::{
 };
 use hexpm::version::Version;
 use itertools::Itertools;
+use smol_str::SmolStr;
+use strum::IntoEnumIterator;
 
 use crate::{
     build_lock::BuildLock,
@@ -56,7 +58,7 @@ fn list_manifest_format() {
         requirements: HashMap::new(),
         packages: vec![
             ManifestPackage {
-                name: "root".to_string(),
+                name: "root".into(),
                 version: Version::parse("1.0.0").unwrap(),
                 build_tools: ["gleam".into()].into(),
                 otp_app: None,
@@ -66,7 +68,7 @@ fn list_manifest_format() {
                 },
             },
             ManifestPackage {
-                name: "aaa".to_string(),
+                name: "aaa".into(),
                 version: Version::new(0, 4, 2),
                 build_tools: ["rebar3".into(), "make".into()].into(),
                 otp_app: Some("aaa_app".into()),
@@ -76,7 +78,7 @@ fn list_manifest_format() {
                 },
             },
             ManifestPackage {
-                name: "zzz".to_string(),
+                name: "zzz".into(),
                 version: Version::new(0, 4, 0),
                 build_tools: ["mix".into()].into(),
                 otp_app: None,
@@ -118,10 +120,14 @@ pub fn download<Telem: Telemetry>(
     let span = tracing::info_span!("download_deps");
     let _enter = span.enter();
 
-    let lock = BuildLock::new()?;
-    let _guard = lock.lock(&telemetry);
-
     let mode = Mode::Dev;
+
+    // We do this before acquiring the build lock so that we don't create the
+    // build directory if there is no gleam.toml
+    crate::config::ensure_config_exists()?;
+
+    let lock = BuildLock::new_packages()?;
+    let _guard = lock.lock(&telemetry);
 
     let http = HttpClient::boxed();
     let fs = ProjectIO::boxed();
@@ -168,8 +174,18 @@ pub fn download<Telem: Telemetry>(
         &telemetry,
     ))?;
 
-    // Record new state of the packages directory
     if manifest_updated {
+        // If the manifest has changed then we need to blow away the build
+        // caches as they may now be outdated.
+        // TODO: test
+        let _guard = BuildLock::lock_all_build(&telemetry)?;
+        tracing::info!("deleting_build_caches");
+        for mode in Mode::iter() {
+            fs::delete_dir(&paths::build_for_mode(mode))?;
+        }
+
+        // Record new state of the packages directory
+        // TODO: test
         tracing::info!("writing_manifest_toml");
         write_manifest_to_disc(&manifest)?;
     }
@@ -182,7 +198,7 @@ async fn download_missing_packages<Telem: Telemetry>(
     downloader: hex::Downloader,
     manifest: &Manifest,
     local: &LocalPackages,
-    project_name: String,
+    project_name: SmolStr,
     telemetry: &Telem,
 ) -> Result<(), Error> {
     let mut count = 0;
@@ -304,7 +320,7 @@ fn missing_local_packages() {
         requirements: HashMap::new(),
         packages: vec![
             ManifestPackage {
-                name: "root".to_string(),
+                name: "root".into(),
                 version: Version::parse("1.0.0").unwrap(),
                 build_tools: ["gleam".into()].into(),
                 otp_app: None,
@@ -314,7 +330,7 @@ fn missing_local_packages() {
                 },
             },
             ManifestPackage {
-                name: "local1".to_string(),
+                name: "local1".into(),
                 version: Version::parse("1.0.0").unwrap(),
                 build_tools: ["gleam".into()].into(),
                 otp_app: None,
@@ -324,7 +340,7 @@ fn missing_local_packages() {
                 },
             },
             ManifestPackage {
-                name: "local2".to_string(),
+                name: "local2".into(),
                 version: Version::parse("3.0.0").unwrap(),
                 build_tools: ["gleam".into()].into(),
                 otp_app: None,
@@ -337,8 +353,8 @@ fn missing_local_packages() {
     };
     let mut extra = LocalPackages {
         packages: [
-            ("local2".to_string(), Version::parse("2.0.0").unwrap()),
-            ("local3".to_string(), Version::parse("3.0.0").unwrap()),
+            ("local2".into(), Version::parse("2.0.0").unwrap()),
+            ("local3".into(), Version::parse("3.0.0").unwrap()),
         ]
         .into(),
     }
@@ -348,7 +364,7 @@ fn missing_local_packages() {
         extra,
         [
             &ManifestPackage {
-                name: "local1".to_string(),
+                name: "local1".into(),
                 version: Version::parse("1.0.0").unwrap(),
                 build_tools: ["gleam".into()].into(),
                 otp_app: None,
@@ -358,7 +374,7 @@ fn missing_local_packages() {
                 },
             },
             &ManifestPackage {
-                name: "local2".to_string(),
+                name: "local2".into(),
                 version: Version::parse("3.0.0").unwrap(),
                 build_tools: ["gleam".into()].into(),
                 otp_app: None,
@@ -375,9 +391,9 @@ fn missing_local_packages() {
 fn extra_local_packages() {
     let mut extra = LocalPackages {
         packages: [
-            ("local1".to_string(), Version::parse("1.0.0").unwrap()),
-            ("local2".to_string(), Version::parse("2.0.0").unwrap()),
-            ("local3".to_string(), Version::parse("3.0.0").unwrap()),
+            ("local1".into(), Version::parse("1.0.0").unwrap()),
+            ("local2".into(), Version::parse("2.0.0").unwrap()),
+            ("local3".into(), Version::parse("3.0.0").unwrap()),
         ]
         .into(),
     }
@@ -385,7 +401,7 @@ fn extra_local_packages() {
         requirements: HashMap::new(),
         packages: vec![
             ManifestPackage {
-                name: "local1".to_string(),
+                name: "local1".into(),
                 version: Version::parse("1.0.0").unwrap(),
                 build_tools: ["gleam".into()].into(),
                 otp_app: None,
@@ -395,7 +411,7 @@ fn extra_local_packages() {
                 },
             },
             ManifestPackage {
-                name: "local2".to_string(),
+                name: "local2".into(),
                 version: Version::parse("3.0.0").unwrap(),
                 build_tools: ["gleam".into()].into(),
                 otp_app: None,
@@ -410,8 +426,8 @@ fn extra_local_packages() {
     assert_eq!(
         extra,
         [
-            ("local2".to_string(), Version::new(2, 0, 0)),
-            ("local3".to_string(), Version::new(3, 0, 0)),
+            ("local2".into(), Version::new(2, 0, 0)),
+            ("local3".into(), Version::new(3, 0, 0)),
         ]
     )
 }

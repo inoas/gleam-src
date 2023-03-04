@@ -1,14 +1,17 @@
 ---
 source: test-package-compiler/src/generated_tests.rs
-assertion_line: 96
+assertion_line: 153
 expression: "./cases/import_shadowed_name_warning"
 ---
+//// /out/lib/the_package/_gleam_artefacts/one.cache
+<.cache binary>
+
 //// /out/lib/the_package/_gleam_artefacts/one.cache_meta
-<20 byte binary>
+<21 byte binary>
 
 //// /out/lib/the_package/_gleam_artefacts/one.erl
 -module(one).
--compile(no_auto_import).
+-compile([no_auto_import, nowarn_unused_vars]).
 
 -export_type([port_/0]).
 
@@ -17,15 +20,15 @@ expression: "./cases/import_shadowed_name_warning"
 
 
 
-//// /out/lib/the_package/_gleam_artefacts/one.gleam_module
-<.gleam_module binary>
+//// /out/lib/the_package/_gleam_artefacts/two.cache
+<.cache binary>
 
 //// /out/lib/the_package/_gleam_artefacts/two.cache_meta
-<31 byte binary>
+<32 byte binary>
 
 //// /out/lib/the_package/_gleam_artefacts/two.erl
 -module(two).
--compile(no_auto_import).
+-compile([no_auto_import, nowarn_unused_vars]).
 
 -export([use_type/1]).
 -export_type([shadowing/0]).
@@ -37,9 +40,6 @@ use_type(Field@0) ->
     wibble:wobble(Field@0).
 
 
-//// /out/lib/the_package/_gleam_artefacts/two.gleam_module
-<.gleam_module binary>
-
 //// /out/lib/the_package/ebin/importy.app
 {application, importy, [
     {vsn, "0.1.0"},
@@ -49,6 +49,28 @@ use_type(Field@0) ->
                two]},
     {registered, []}
 ]}.
+
+
+//// Warning
+
+warning: Unused private constructor
+  ┌─ src/two.gleam:9:3
+  │
+9 │   Port
+  │   ^ This private constructor is never used.
+
+Hint: You can safely remove it.
+
+
+//// Warning
+
+warning: Unused private type
+  ┌─ src/two.gleam:7:1
+  │
+7 │ type Shadowing {
+  │ ^ This private type is never used.
+
+Hint: You can safely remove it.
 
 
 

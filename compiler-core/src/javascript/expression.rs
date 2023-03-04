@@ -1,20 +1,22 @@
-use std::sync::Arc;
-
-use super::{pattern::CompiledPattern, *};
+use super::{
+    pattern::{Assignment, CompiledPattern},
+    *,
+};
 use crate::{
     ast::*,
     line_numbers::LineNumbers,
     pretty::*,
     type_::{ModuleValueConstructor, Type, ValueConstructor, ValueConstructorVariant},
 };
+use std::sync::Arc;
 
 #[derive(Debug)]
 pub(crate) struct Generator<'module> {
-    module_name: &'module [String],
+    module_name: SmolStr,
     line_numbers: &'module LineNumbers,
-    function_name: Option<&'module str>,
-    function_arguments: Vec<Option<&'module str>>,
-    current_scope_vars: im::HashMap<String, usize>,
+    function_name: Option<&'module SmolStr>,
+    function_arguments: Vec<Option<&'module SmolStr>>,
+    current_scope_vars: im::HashMap<SmolStr, usize>,
     pub tail_position: bool,
     pub in_iife: bool,
     // We register whether these features are used within an expression so that
@@ -29,15 +31,15 @@ pub(crate) struct Generator<'module> {
 impl<'module> Generator<'module> {
     #[allow(clippy::too_many_arguments)] // TODO: FIXME
     pub fn new(
-        module_name: &'module [String],
+        module_name: SmolStr,
         line_numbers: &'module LineNumbers,
-        function_name: &'module str,
-        function_arguments: Vec<Option<&'module str>>,
+        function_name: &'module SmolStr,
+        function_arguments: Vec<Option<&'module SmolStr>>,
         tracker: &'module mut UsageTracker,
-        mut current_scope_vars: im::HashMap<String, usize>,
+        mut current_scope_vars: im::HashMap<SmolStr, usize>,
     ) -> Self {
         for &name in function_arguments.iter().flatten() {
-            let _ = current_scope_vars.insert(name.to_string(), 0);
+            let _ = current_scope_vars.insert(name.clone(), 0);
         }
         Self {
             tracker,
@@ -52,21 +54,21 @@ impl<'module> Generator<'module> {
         }
     }
 
-    pub fn local_var<'a>(&mut self, name: &'a str) -> Document<'a> {
+    pub fn local_var<'a>(&mut self, name: &'a SmolStr) -> Document<'a> {
         match self.current_scope_vars.get(name) {
             None => {
-                let _ = self.current_scope_vars.insert(name.to_string(), 0);
+                let _ = self.current_scope_vars.insert(name.clone(), 0);
                 maybe_escape_identifier_doc(name)
             }
             Some(0) => maybe_escape_identifier_doc(name),
-            Some(n) if name == "$" => Document::String(format!("${}", n)),
-            Some(n) => Document::String(format!("{}${}", name, n)),
+            Some(n) if name == "$" => Document::String(format!("${n}")),
+            Some(n) => Document::String(format!("{name}${n}")),
         }
     }
 
-    pub fn next_local_var<'a>(&mut self, name: &'a str) -> Document<'a> {
+    pub fn next_local_var<'a>(&mut self, name: &'a SmolStr) -> Document<'a> {
         let next = self.current_scope_vars.get(name).map_or(0, |i| i + 1);
-        let _ = self.current_scope_vars.insert(name.to_string(), next);
+        let _ = self.current_scope_vars.insert(name.clone(), next);
         self.local_var(name)
     }
 
@@ -155,6 +157,8 @@ impl<'module> Generator<'module> {
                 label, location, ..
             } => Ok(self.todo(label, location)),
 
+            TypedExpr::Panic { location, .. } => Ok(self.panic(location)),
+
             TypedExpr::BitString { segments, .. } => self.bit_string(segments),
 
             TypedExpr::ModuleSelect {
@@ -219,7 +223,7 @@ impl<'module> Generator<'module> {
 
                 // Anything else
                 _ => Err(Error::Unsupported {
-                    feature: "This bit string segment option".to_string(),
+                    feature: "This bit string segment option".into(),
                     location: segment.location,
                 }),
             }
@@ -326,7 +330,11 @@ impl<'module> Generator<'module> {
         .group()
     }
 
-    fn variable<'a>(&mut self, name: &'a str, constructor: &'a ValueConstructor) -> Document<'a> {
+    fn variable<'a>(
+        &mut self,
+        name: &'a SmolStr,
+        constructor: &'a ValueConstructor,
+    ) -> Document<'a> {
         match &constructor.variant {
             ValueConstructorVariant::Record { arity, .. } => {
                 self.record_constructor(constructor.type_.clone(), None, name, *arity)
@@ -363,7 +371,7 @@ impl<'module> Generator<'module> {
                 None => docvec!["new ", name, "()"],
             }
         } else {
-            let vars = (0..arity).map(|i| Document::String(format!("var{}", i)));
+            let vars = (0..arity).map(|i| Document::String(format!("var{i}")));
             let body = docvec![
                 "return ",
                 construct_record(qualifier, name, vars.clone()),
@@ -416,7 +424,7 @@ impl<'module> Generator<'module> {
             self.local_var(name)
         } else {
             let subject = self.not_in_tail_position(|gen| gen.wrap_expression(subject))?;
-            let name = self.next_local_var(pattern::ASSIGNMENT_VAR);
+            let name = self.next_local_var(&pattern::ASSIGNMENT_VAR_SMOL_STR);
             docs.push("let ".to_doc());
             docs.push(name.clone());
             docs.push(" = ".to_doc());
@@ -480,21 +488,21 @@ impl<'module> Generator<'module> {
         if let TypedPattern::Var { name, .. } = pattern {
             // Subject must be rendered before the variable for variable numbering
             let subject = self.not_in_tail_position(|gen| gen.wrap_expression(value))?;
-            let name = self.next_local_var(name);
+            let js_name = self.next_local_var(name);
             return Ok(if self.tail_position {
                 docvec![
                     "let ",
-                    name.clone(),
+                    js_name.clone(),
                     " = ",
                     subject,
                     ";",
                     line(),
                     "return ",
-                    name,
+                    js_name,
                     ";"
                 ]
             } else {
-                docvec!["let ", name, " = ", subject, ";"]
+                docvec!["let ", js_name, " = ", subject, ";"]
             }
             .force_break());
         }
@@ -783,7 +791,7 @@ impl<'module> Generator<'module> {
         // And there's a new scope
         let scope = self.current_scope_vars.clone();
         for name in arguments.iter().flat_map(Arg::get_variable_name) {
-            let _ = self.current_scope_vars.insert(name.to_string(), 0);
+            let _ = self.current_scope_vars.insert(name.clone(), 0);
         }
 
         // This is a new function so unset the recorded name so that we don't
@@ -840,7 +848,7 @@ impl<'module> Generator<'module> {
     fn tuple_index<'a>(&mut self, tuple: &'a TypedExpr, index: u64) -> Output<'a> {
         self.not_in_tail_position(|gen| {
             let tuple = gen.wrap_expression(tuple)?;
-            Ok(docvec![tuple, Document::String(format!("[{}]", index))])
+            Ok(docvec![tuple, Document::String(format!("[{index}]"))])
         })
     }
 
@@ -940,7 +948,7 @@ impl<'module> Generator<'module> {
         Ok(docvec!(left, " ", op, " ", right))
     }
 
-    fn todo<'a>(&mut self, message: &'a Option<String>, location: &'a SrcSpan) -> Document<'a> {
+    fn todo<'a>(&mut self, message: &'a Option<SmolStr>, location: &'a SrcSpan) -> Document<'a> {
         let tail_position = self.tail_position;
         self.tail_position = false;
 
@@ -948,6 +956,19 @@ impl<'module> Generator<'module> {
             .as_deref()
             .unwrap_or("This has not yet been implemented");
         let doc = self.throw_error("todo", message, *location, vec![]);
+
+        // Reset tail position so later values are returned as needed. i.e.
+        // following clauses in a case expression.
+        self.tail_position = tail_position;
+
+        doc
+    }
+
+    fn panic<'a>(&mut self, location: &'a SrcSpan) -> Document<'a> {
+        let tail_position = self.tail_position;
+        self.tail_position = false;
+
+        let doc = self.throw_error("todo", "panic expression evaluated", *location, vec![]);
 
         // Reset tail position so later values are returned as needed. i.e.
         // following clauses in a case expression.
@@ -966,17 +987,18 @@ impl<'module> Generator<'module> {
     where
         Fields: IntoIterator<Item = (&'a str, Document<'a>)>,
     {
-        self.tracker.throw_error_used = true;
-        let module = Document::String(self.module_name.join("/")).surround('"', '"');
-        // TODO switch to use `string(self.function_name)`
-        // This will require resolving the
-        // difference in lifetimes 'module and 'a.
-        let function = Document::String(self.function_name.unwrap_or_default().to_string())
+        self.tracker.make_error_used = true;
+        let module = self.module_name.clone().to_doc().surround('"', '"');
+        let function = self
+            .function_name
+            .cloned()
+            .unwrap_or_default()
+            .to_doc()
             .surround("\"", "\"");
         let line = self.line_numbers.line_number(location.start).to_doc();
         let fields = wrap_object(fields.into_iter().map(|(k, v)| (k.to_doc(), Some(v))));
         docvec![
-            "throwError",
+            "throw makeError",
             wrap_args([
                 string(error_name),
                 module,
@@ -985,7 +1007,6 @@ impl<'module> Generator<'module> {
                 string(message),
                 fields
             ]),
-            ";"
         ]
     }
 
@@ -1045,7 +1066,7 @@ impl<'module> Generator<'module> {
         .group())
     }
 
-    fn pattern_assignments_doc(assignments: Vec<pattern::Assignment<'_>>) -> Document<'_> {
+    fn pattern_assignments_doc(assignments: Vec<Assignment<'_>>) -> Document<'_> {
         let assignments = assignments.into_iter().map(pattern::Assignment::into_doc);
         concat(Itertools::intersperse(assignments, line()))
     }
@@ -1099,6 +1120,65 @@ pub fn float(value: &str) -> Document<'_> {
     value.to_doc()
 }
 
+pub(crate) fn guard_constant_expression<'a>(
+    assignments: &mut Vec<Assignment<'a>>,
+    tracker: &mut UsageTracker,
+    expression: &'a TypedConstant,
+) -> Output<'a> {
+    match expression {
+        Constant::Tuple { elements, .. } => array(
+            elements
+                .iter()
+                .map(|e| guard_constant_expression(assignments, tracker, e)),
+        ),
+
+        Constant::List { elements, .. } => {
+            tracker.list_used = true;
+            list(
+                elements
+                    .iter()
+                    .map(|e| guard_constant_expression(assignments, tracker, e)),
+                None,
+            )
+        }
+        Constant::Record { typ, name, .. } if typ.is_bool() && name == "True" => {
+            Ok("true".to_doc())
+        }
+        Constant::Record { typ, name, .. } if typ.is_bool() && name == "False" => {
+            Ok("false".to_doc())
+        }
+        Constant::Record { typ, .. } if typ.is_nil() => Ok("undefined".to_doc()),
+
+        Constant::Record {
+            tag,
+            typ,
+            args,
+            module,
+            ..
+        } => {
+            if typ.is_result() {
+                if tag == "Ok" {
+                    tracker.ok_used = true;
+                } else {
+                    tracker.error_used = true;
+                }
+            }
+            let field_values: Vec<_> = args
+                .iter()
+                .map(|arg| guard_constant_expression(assignments, tracker, &arg.value))
+                .try_collect()?;
+            Ok(construct_record(module.as_deref(), tag, field_values))
+        }
+
+        Constant::Var { name, .. } => Ok(assignments
+            .iter()
+            .find(|assignment| assignment.name == name)
+            .map(|assignment| assignment.subject.clone().append(assignment.path.clone()))
+            .unwrap_or_else(|| name.to_doc())),
+        expression => constant_expression(tracker, expression),
+    }
+}
+
 pub(crate) fn constant_expression<'a>(
     tracker: &mut UsageTracker,
     expression: &'a TypedConstant,
@@ -1149,10 +1229,16 @@ pub(crate) fn constant_expression<'a>(
         }
 
         Constant::BitString { location, .. } => Err(Error::Unsupported {
-            feature: "Bit string syntax".to_string(),
+            feature: "Bit string syntax".into(),
             location: *location,
         }),
-        Constant::Var { name, .. } => Ok(name.to_doc()),
+
+        Constant::Var { name, module, .. } => Ok({
+            match module {
+                None => name.to_doc(),
+                Some(module) => docvec!["$", module, ".", name],
+            }
+        }),
     }
 }
 
@@ -1240,6 +1326,7 @@ impl TypedExpr {
                 | TypedExpr::Todo { .. }
                 | TypedExpr::Call { .. }
                 | TypedExpr::Case { .. }
+                | TypedExpr::Panic { .. }
                 | TypedExpr::Sequence { .. }
                 | TypedExpr::Pipeline { .. }
                 | TypedExpr::Assignment { .. }

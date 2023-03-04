@@ -9,7 +9,7 @@ mod use_;
 macro_rules! assert_format {
     ($src:expr $(,)?) => {
         let mut writer = String::new();
-        $crate::format::pretty(&mut writer, $src, std::path::Path::new("<stdin>")).unwrap();
+        $crate::format::pretty(&mut writer, &$src.into(), std::path::Path::new("<stdin>")).unwrap();
         assert_eq!($src, writer);
     };
 }
@@ -18,7 +18,7 @@ macro_rules! assert_format {
 macro_rules! assert_format_rewrite {
     ($src:expr, $output:expr  $(,)?) => {
         let mut writer = String::new();
-        pretty(&mut writer, $src, std::path::Path::new("<stdin>")).unwrap();
+        pretty(&mut writer, &$src.into(), std::path::Path::new("<stdin>")).unwrap();
         assert_eq!(writer, $output);
     };
 }
@@ -1040,86 +1040,415 @@ fn binary_operators() {
 #[test]
 fn expr_int() {
     assert_format!(
-        r#"fn main() {
+        r#"fn i() {
   1
 }
 "#
     );
 
     assert_format!(
-        r#"fn main() {
+        r#"fn i() {
   121_234_345_989_000
 }
 "#
     );
 
     assert_format!(
-        r#"fn main() {
+        r#"fn i() {
   -12_928_347_925
 }
 "#
     );
 
     assert_format!(
-        r#"fn main() {
+        r#"fn i() {
   1_234_567_890
+}
+"#
+    );
+
+    assert_format!(
+        r#"fn i() {
   123_456_789
+}
+"#
+    );
+
+    assert_format!(
+        r#"fn i() {
   12_345_678
+}
+"#
+    );
+
+    assert_format!(
+        r#"fn i() {
   1_234_567
+}
+"#
+    );
+
+    assert_format!(
+        r#"fn i() {
   123_456
+}
+"#
+    );
+
+    assert_format!(
+        r#"fn i() {
   12_345
+}
+"#
+    );
+
+    assert_format!(
+        r#"fn i() {
   1234
+}
+"#
+    );
+
+    assert_format!(
+        r#"fn i() {
   123
+}
+"#
+    );
+
+    assert_format!(
+        r#"fn i() {
   12
+}
+"#
+    );
+
+    assert_format!(
+        r#"fn i() {
   1
+}
+"#
+    );
+
+    assert_format!(
+        r#"fn i() {
   -1_234_567_890
+}
+"#
+    );
+
+    assert_format!(
+        r#"fn i() {
   -123_456_789
+}
+"#
+    );
+
+    assert_format!(
+        r#"fn i() {
   -12_345_678
+}
+"#
+    );
+
+    assert_format!(
+        r#"fn i() {
   -1_234_567
+}
+"#
+    );
+
+    assert_format!(
+        r#"fn i() {
   -123_456
+}
+"#
+    );
+
+    assert_format!(
+        r#"fn i() {
   -12_345
+}
+"#
+    );
+
+    assert_format!(
+        r#"fn i() {
   -1234
+}
+"#
+    );
+
+    assert_format!(
+        r#"fn i() {
   -123
+}
+"#
+    );
+
+    assert_format!(
+        r#"fn i() {
   -12
+}
+"#
+    );
+
+    assert_format!(
+        r#"fn i() {
   -1
 }
 "#
     );
 
     assert_format_rewrite!(
-        r#"fn main() {
+        r#"fn i() {
   1_234
+}
+"#,
+        r#"fn i() {
+  1234
+}
+"#
+    );
+
+    assert_format_rewrite!(
+        r#"fn i() {
   12_34
+}
+"#,
+        r#"fn i() {
+  1234
+}
+"#
+    );
+
+    assert_format_rewrite!(
+        r#"fn i() {
   123_4
+}
+"#,
+        r#"fn i() {
+  1234
+}
+"#
+    );
+
+    assert_format_rewrite!(
+        r#"fn i() {
   1234_5
+}
+"#,
+        r#"fn i() {
+  12_345
+}
+"#
+    );
+
+    assert_format_rewrite!(
+        r#"fn i() {
   12345_6
+}
+"#,
+        r#"fn i() {
+  123_456
+}
+"#
+    );
+
+    assert_format_rewrite!(
+        r#"fn i() {
   123456_7
+}
+"#,
+        r#"fn i() {
+  1_234_567
+}
+"#
+    );
+
+    assert_format_rewrite!(
+        r#"fn i() {
   1234567_8
+}
+"#,
+        r#"fn i() {
+  12_345_678
+}
+"#
+    );
+
+    assert_format_rewrite!(
+        r#"fn i() {
   -1_234
+}
+"#,
+        r#"fn i() {
+  -1234
+}
+"#
+    );
+
+    assert_format_rewrite!(
+        r#"fn i() {
   -12_34
+}
+"#,
+        r#"fn i() {
+  -1234
+}
+"#
+    );
+
+    assert_format_rewrite!(
+        r#"fn i() {
   -123_4
+}
+"#,
+        r#"fn i() {
+  -1234
+}
+"#
+    );
+
+    assert_format_rewrite!(
+        r#"fn i() {
   -1234_5
+}
+"#,
+        r#"fn i() {
+  -12_345
+}
+"#
+    );
+
+    assert_format_rewrite!(
+        r#"fn i() {
   -12345_6
+}
+"#,
+        r#"fn i() {
+  -123_456
+}
+"#
+    );
+
+    assert_format_rewrite!(
+        r#"fn i() {
   -123456_7
+}
+"#,
+        r#"fn i() {
+  -1_234_567
+}
+"#
+    );
+
+    assert_format_rewrite!(
+        r#"fn i() {
   -1234567_8
 }
 "#,
-        r#"fn main() {
-  1234
-  1234
-  1234
-  12_345
-  123_456
-  1_234_567
-  12_345_678
-  -1234
-  -1234
-  -1234
-  -12_345
-  -123_456
-  -1_234_567
+        r#"fn i() {
   -12_345_678
 }
+"#
+    );
+
+    assert_format_rewrite!(
+        r#"fn i() {
+  let #(1_234, _) = #(1_234, Nil)
+}
+"#,
+        r#"fn i() {
+  let #(1234, _) = #(1234, Nil)
+}
+"#
+    );
+    assert_format_rewrite!(
+        r#"fn i() {
+  let #(12_34, _) = #(12_34, Nil)
+}
+"#,
+        r#"fn i() {
+  let #(1234, _) = #(1234, Nil)
+}
+"#
+    );
+    assert_format_rewrite!(
+        r#"fn i() {
+  let #(1234567_8, _) = #(1234567_8, Nil)
+}
+"#,
+        r#"fn i() {
+  let #(12_345_678, _) = #(12_345_678, Nil)
+}
+"#
+    );
+    assert_format_rewrite!(
+        r#"fn i() {
+  let #(-1_234, _) = #(-1_234, Nil)
+}
+"#,
+        r#"fn i() {
+  let #(-1234, _) = #(-1234, Nil)
+}
+"#
+    );
+    assert_format_rewrite!(
+        r#"fn i() {
+  let #(-12_34, _) = #(-12_34, Nil)
+}
+"#,
+        r#"fn i() {
+  let #(-1234, _) = #(-1234, Nil)
+}
+"#
+    );
+    assert_format_rewrite!(
+        r#"fn i() {
+  let #(-1234567_8, _) = #(-1234567_8, Nil)
+}
+"#,
+        r#"fn i() {
+  let #(-12_345_678, _) = #(-12_345_678, Nil)
+}
+"#
+    );
+
+    assert_format_rewrite!(
+        r#"const an_int = 1_234
+"#,
+        r#"const an_int = 1234
+"#
+    );
+    assert_format_rewrite!(
+        r#"const an_int = 12_34
+"#,
+        r#"const an_int = 1234
+"#
+    );
+    assert_format_rewrite!(
+        r#"const an_int = 1234567_8
+"#,
+        r#"const an_int = 12_345_678
+"#
+    );
+    assert_format_rewrite!(
+        r#"const an_int = -1_234
+"#,
+        r#"const an_int = -1234
+"#
+    );
+    assert_format_rewrite!(
+        r#"const an_int = -12_34
+"#,
+        r#"const an_int = -1234
+"#
+    );
+    assert_format_rewrite!(
+        r#"const an_int = -1234567_8
+"#,
+        r#"const an_int = -12_345_678
 "#
     );
 
@@ -1137,129 +1466,658 @@ fn expr_int() {
 #[test]
 fn expr_float() {
     assert_format_rewrite!(
-        r#"fn main() {
+        r#"fn f() {
   1.
 }
 "#,
-        r#"fn main() {
+        r#"fn f() {
+  1.0
+}
+"#
+    );
+
+    assert_format_rewrite!(
+        r#"fn f() {
+  1.00
+}
+"#,
+        r#"fn f() {
+  1.0
+}
+"#
+    );
+
+    assert_format_rewrite!(
+        r#"fn f() {
+  1.00100
+}
+"#,
+        r#"fn f() {
+  1.001
+}
+"#
+    );
+
+    assert_format_rewrite!(
+        r#"fn f() {
+  1.001001
+}
+"#,
+        r#"fn f() {
+  1.001001
+}
+"#
+    );
+
+    assert_format_rewrite!(
+        r#"fn f() {
+  1.00e100_100
+}
+"#,
+        r#"fn f() {
+  1.0e100_100
+}
+"#
+    );
+
+    assert_format_rewrite!(
+        r#"fn f() {
+  1.00100e100_100
+}
+"#,
+        r#"fn f() {
+  1.001e100_100
+}
+"#
+    );
+
+    assert_format_rewrite!(
+        r#"fn f() {
+  1.001001e100_100
+}
+"#,
+        r#"fn f() {
+  1.001001e100_100
+}
+"#
+    );
+
+    assert_format!(
+        r#"fn f() {
   1.0
 }
 "#
     );
 
     assert_format!(
-        r#"fn main() {
-  1.0
-}
-"#
-    );
-
-    assert_format!(
-        r#"fn main() {
+        r#"fn f() {
   -1.0
 }
 "#
     );
 
     assert_format!(
-        r#"fn main() {
+        r#"fn f() {
   9999.6666
 }
 "#
     );
 
     assert_format!(
-        r#"fn main() {
+        r#"fn f() {
   -1_234_567_890.0
+}
+"#
+    );
+    assert_format!(
+        r#"fn f() {
+  -1_234_567_890.0
+}
+"#
+    );
+    assert_format!(
+        r#"fn f() {
   -123_456_789.0
+}
+"#
+    );
+    assert_format!(
+        r#"fn f() {
   -12_345_678.0
+}
+"#
+    );
+    assert_format!(
+        r#"fn f() {
   -1_234_567.0
+}
+"#
+    );
+    assert_format!(
+        r#"fn f() {
   -123_456.0
+}
+"#
+    );
+    assert_format!(
+        r#"fn f() {
   -12_345.0
+}
+"#
+    );
+    assert_format!(
+        r#"fn f() {
   -1234.0
+}
+"#
+    );
+    assert_format!(
+        r#"fn f() {
   -123.0
+}
+"#
+    );
+    assert_format!(
+        r#"fn f() {
   -12.0
+}
+"#
+    );
+    assert_format!(
+        r#"fn f() {
   -1.0
+}
+"#
+    );
+    assert_format!(
+        r#"fn f() {
   -0.0
+}
+"#
+    );
+    assert_format!(
+        r#"fn f() {
   -1_234_567_890.1
+}
+"#
+    );
+    assert_format!(
+        r#"fn f() {
   -123_456_789.1
+}
+"#
+    );
+    assert_format!(
+        r#"fn f() {
   -12_345_678.1
+}
+"#
+    );
+    assert_format!(
+        r#"fn f() {
   -1_234_567.1
+}
+"#
+    );
+    assert_format!(
+        r#"fn f() {
   -123_456.1
+}
+"#
+    );
+    assert_format!(
+        r#"fn f() {
   -12_345.1
+}
+"#
+    );
+    assert_format!(
+        r#"fn f() {
   -1234.1
+}
+"#
+    );
+    assert_format!(
+        r#"fn f() {
   -123.1
+}
+"#
+    );
+    assert_format!(
+        r#"fn f() {
   -12.1
+}
+"#
+    );
+    assert_format!(
+        r#"fn f() {
   -1.1
+}
+"#
+    );
+    assert_format!(
+        r#"fn f() {
   -0.1
+}
+"#
+    );
+    assert_format!(
+        r#"fn f() {
   -1_234_567_890.123456
+}
+"#
+    );
+    assert_format!(
+        r#"fn f() {
   -123_456_789.123456
+}
+"#
+    );
+    assert_format!(
+        r#"fn f() {
   -12_345_678.123456
+}
+"#
+    );
+    assert_format!(
+        r#"fn f() {
   -1_234_567.123456
+}
+"#
+    );
+    assert_format!(
+        r#"fn f() {
   -123_456.123456
+}
+"#
+    );
+    assert_format!(
+        r#"fn f() {
   -12_345.123456
+}
+"#
+    );
+    assert_format!(
+        r#"fn f() {
   -1234.123456
+}
+"#
+    );
+    assert_format!(
+        r#"fn f() {
   -123.123456
+}
+"#
+    );
+    assert_format!(
+        r#"fn f() {
   -12.123456
+}
+"#
+    );
+    assert_format!(
+        r#"fn f() {
   -1.123456
+}
+"#
+    );
+    assert_format!(
+        r#"fn f() {
   -0.123456
 }
 "#
     );
 
     assert_format_rewrite!(
-        r#"fn main() {
+        r#"fn f() {
   1_234.0
+}
+"#,
+        r#"fn f() {
+  1234.0
+}
+"#
+    );
+    assert_format_rewrite!(
+        r#"fn f() {
   12_34.0
+}
+"#,
+        r#"fn f() {
+  1234.0
+}
+"#
+    );
+    assert_format_rewrite!(
+        r#"fn f() {
   123_4.0
+}
+"#,
+        r#"fn f() {
+  1234.0
+}
+"#
+    );
+    assert_format_rewrite!(
+        r#"fn f() {
   1234_5.0
+}
+"#,
+        r#"fn f() {
+  12_345.0
+}
+"#
+    );
+    assert_format_rewrite!(
+        r#"fn f() {
   12345_6.0
+}
+"#,
+        r#"fn f() {
+  123_456.0
+}
+"#
+    );
+    assert_format_rewrite!(
+        r#"fn f() {
   123456_7.0
+}
+"#,
+        r#"fn f() {
+  1_234_567.0
+}
+"#
+    );
+    assert_format_rewrite!(
+        r#"fn f() {
   1234567_8.0
+}
+"#,
+        r#"fn f() {
+  12_345_678.0
+}
+"#
+    );
+    assert_format_rewrite!(
+        r#"fn f() {
   -1_234.0
+}
+"#,
+        r#"fn f() {
+  -1234.0
+}
+"#
+    );
+    assert_format_rewrite!(
+        r#"fn f() {
   -12_34.0
+}
+"#,
+        r#"fn f() {
+  -1234.0
+}
+"#
+    );
+    assert_format_rewrite!(
+        r#"fn f() {
   -123_4.0
+}
+"#,
+        r#"fn f() {
+  -1234.0
+}
+"#
+    );
+    assert_format_rewrite!(
+        r#"fn f() {
   -1234_5.0
+}
+"#,
+        r#"fn f() {
+  -12_345.0
+}
+"#
+    );
+    assert_format_rewrite!(
+        r#"fn f() {
   -12345_6.0
+}
+"#,
+        r#"fn f() {
+  -123_456.0
+}
+"#
+    );
+    assert_format_rewrite!(
+        r#"fn f() {
   -123456_7.0
+}
+"#,
+        r#"fn f() {
+  -1_234_567.0
+}
+"#
+    );
+    assert_format_rewrite!(
+        r#"fn f() {
   -1234567_8.0
 }
 "#,
-        r#"fn main() {
-  1234.0
-  1234.0
-  1234.0
-  12_345.0
-  123_456.0
-  1_234_567.0
-  12_345_678.0
-  -1234.0
-  -1234.0
-  -1234.0
-  -12_345.0
-  -123_456.0
-  -1_234_567.0
+        r#"fn f() {
   -12_345_678.0
 }
 "#
     );
 
+    assert_format_rewrite!(
+        r#"fn f() {
+  let #(1_234.0, _) = #(1_234.0, Nil)
+}
+"#,
+        r#"fn f() {
+  let #(1234.0, _) = #(1234.0, Nil)
+}
+"#
+    );
+    assert_format_rewrite!(
+        r#"fn f() {
+  let #(12_34.0, _) = #(12_34.0, Nil)
+}
+"#,
+        r#"fn f() {
+  let #(1234.0, _) = #(1234.0, Nil)
+}
+"#
+    );
+    assert_format_rewrite!(
+        r#"fn f() {
+  let #(1234567_8.0, _) = #(1234567_8.0, Nil)
+}
+"#,
+        r#"fn f() {
+  let #(12_345_678.0, _) = #(12_345_678.0, Nil)
+}
+"#
+    );
+    assert_format_rewrite!(
+        r#"fn f() {
+  let #(-1_234.0, _) = #(-1_234.0, Nil)
+}
+"#,
+        r#"fn f() {
+  let #(-1234.0, _) = #(-1234.0, Nil)
+}
+"#
+    );
+    assert_format_rewrite!(
+        r#"fn f() {
+  let #(-12_34.0, _) = #(-12_34.0, Nil)
+}
+"#,
+        r#"fn f() {
+  let #(-1234.0, _) = #(-1234.0, Nil)
+}
+"#
+    );
+    assert_format_rewrite!(
+        r#"fn f() {
+  let #(-1234567_8.0, _) = #(-1234567_8.0, Nil)
+}
+"#,
+        r#"fn f() {
+  let #(-12_345_678.0, _) = #(-12_345_678.0, Nil)
+}
+"#
+    );
+    assert_format_rewrite!(
+        r#"const a_float = 1_234.0
+"#,
+        r#"const a_float = 1234.0
+"#
+    );
+    assert_format_rewrite!(
+        r#"const a_float = 12_34.0
+"#,
+        r#"const a_float = 1234.0
+"#
+    );
+    assert_format_rewrite!(
+        r#"const a_float = 1234567_8.0
+"#,
+        r#"const a_float = 12_345_678.0
+"#
+    );
+    assert_format_rewrite!(
+        r#"const a_float = -1_234.0
+"#,
+        r#"const a_float = -1234.0
+"#
+    );
+    assert_format_rewrite!(
+        r#"const a_float = -12_34.0
+"#,
+        r#"const a_float = -1234.0
+"#
+    );
+    assert_format_rewrite!(
+        r#"const a_float = -1234567_8.0
+"#,
+        r#"const a_float = -12_345_678.0
+"#
+    );
+
+    assert_format_rewrite!(
+        r#"const a_float = 1234.00
+"#,
+        r#"const a_float = 1234.0
+"#
+    );
+    assert_format_rewrite!(
+        r#"const a_float = 1234.00100
+"#,
+        r#"const a_float = 1234.001
+"#
+    );
+    assert_format_rewrite!(
+        r#"const a_float = 1234.001001
+"#,
+        r#"const a_float = 1234.001001
+"#
+    );
+
     assert_format!(
-        r#"fn main() {
+        r#"fn f() {
   1.0e1
+}
+"#
+    );
+    assert_format!(
+        r#"fn f() {
   1.0e-1
+}
+"#
+    );
+    assert_format!(
+        r#"fn f() {
   -1.0e1
+}
+"#
+    );
+    assert_format!(
+        r#"fn f() {
   -1.0e-1
+}
+"#
+    );
+    assert_format!(
+        r#"fn f() {
   1.0e10
+}
+"#
+    );
+    assert_format!(
+        r#"fn f() {
   1.0e-10
+}
+"#
+    );
+    assert_format!(
+        r#"fn f() {
   -1.0e10
+}
+"#
+    );
+    assert_format!(
+        r#"fn f() {
   -11.0e-10
+}
+"#
+    );
+    assert_format!(
+        r#"fn f() {
   1.0e100
+}
+"#
+    );
+    assert_format!(
+        r#"fn f() {
   1.0e-100
+}
+"#
+    );
+    assert_format!(
+        r#"fn f() {
   -1.0e100
+}
+"#
+    );
+    assert_format!(
+        r#"fn f() {
   -11.0e-100
-  1.0000e100
-  1.0000e100_100
+}
+"#
+    );
+    assert_format!(
+        r#"fn f() {
+  1.0e100
+}
+"#
+    );
+    assert_format!(
+        r#"fn f() {
+  1.0e100_100
+}
+"#
+    );
+    assert_format!(
+        r#"fn f() {
+  1.0e100_100
+}
+"#
+    );
+    assert_format!(
+        r#"fn f() {
+  1.001e100_100
 }
 "#
     );
@@ -1578,15 +2436,21 @@ fn expr_let() {
 }
 "#
     );
+}
 
+#[test]
+fn expr_let1() {
     assert_format!(
         r#"fn main() {
-  assert x = 1
+  let assert x = 1
   Nil
 }
 "#
     );
+}
 
+#[test]
+fn expr_let2() {
     assert_format!(
         r#"fn main() {
   let x = {
@@ -1597,7 +2461,10 @@ fn expr_let() {
 }
 "#
     );
+}
 
+#[test]
+fn expr_let3() {
     assert_format!(
         r#"fn main() {
   let x = {
@@ -1608,7 +2475,10 @@ fn expr_let() {
 }
 "#
     );
+}
 
+#[test]
+fn expr_let4() {
     assert_format!(
         r#"fn main() {
   let y = case x {
@@ -1619,7 +2489,10 @@ fn expr_let() {
 }
 "#
     );
+}
 
+#[test]
+fn expr_let5() {
     assert_format!(
         r#"fn main() {
   let y = case x {
@@ -1631,7 +2504,10 @@ fn expr_let() {
 }
 "#
     );
+}
 
+#[test]
+fn expr_let6() {
     assert_format!(
         r#"fn main() {
   let x = fn(x) { x }
@@ -1639,7 +2515,10 @@ fn expr_let() {
 }
 "#
     );
+}
 
+#[test]
+fn expr_let7() {
     assert_format!(
         r#"fn main() {
   let x = fn() {
@@ -1650,7 +2529,10 @@ fn expr_let() {
 }
 "#
     );
+}
 
+#[test]
+fn expr_let8() {
     assert_format!(
         r#"fn main() {
   let x = fn(
@@ -1665,7 +2547,10 @@ fn expr_let() {
 }
 "#
     );
+}
 
+#[test]
+fn expr_let9() {
     assert_format!(
         r#"fn main() {
   let x = fn(
@@ -1679,7 +2564,10 @@ fn expr_let() {
 }
 "#
     );
+}
 
+#[test]
+fn expr_let10() {
     assert_format!(
         r#"fn main() {
   let dict = map.from_list([#("a", 0), #("b", 1), #("c", 2), #("d", 3)])
@@ -1988,6 +2876,24 @@ fn expr_case() {
 }
 "
     );
+
+    assert_format!(
+        r#"fn main() {
+  case bool {
+    True -> {
+      "Foo"
+      |> io.println
+
+      "Bar"
+      |> io.println
+
+      Nil
+    }
+    False -> Nil
+  }
+}
+"#
+    );
 }
 
 #[test]
@@ -2090,6 +2996,17 @@ fn expr_case_alternative_patterns() {
 }
 "#
     );
+
+    assert_format!(
+        r#"fn main() {
+  case pat {
+    pat.Typeof("Boolean", pat)
+    | pat.Typeof("Number", pat)
+    | pat.Typeof("String", pat) -> Nil
+  }
+}
+"#
+    );
 }
 
 #[test]
@@ -2176,6 +3093,59 @@ pub fn main() {
 }
 
 #[test]
+fn expr_case_clause_comments() {
+    assert_format!(
+        r#"fn main() {
+  case 1 {
+    // Hello Louis!
+    1 | 2 | 3 -> Nil
+  }
+}
+"#
+    );
+
+    assert_format!(
+        r#"fn main() {
+  case 1 {
+    // Hello José!
+    1 | 2 -> Nil
+    // Hello Louis!
+    n -> Nil
+  }
+}
+"#
+    );
+
+    assert_format!(
+        r#"fn main() {
+  case 1 {
+    // Hello Joe!
+    1 | 2 -> Nil
+
+    // Hello Louis!
+    n -> Nil
+  }
+}
+"#
+    );
+
+    assert_format!(
+        r#"fn main() {
+  case pat {
+    // Hello Ada
+    pat.Typeof("Boolean", pat) | pat.Typeof("Number", pat) -> True
+
+    // Hello Alan
+    pat.Typeof("Boolean", pat)
+    | pat.Typeof("Number", pat)
+    | pat.Typeof("String", pat) -> False
+  }
+}
+"#
+    );
+}
+
+#[test]
 fn field_access() {
     assert_format!(
         r#"fn main() {
@@ -2224,6 +3194,16 @@ fn tuple_access() {
 }
 
 #[test]
+fn expr_panic() {
+    assert_format!(
+        "fn main() {
+  panic
+}
+"
+    );
+}
+
+#[test]
 fn expr_todo() {
     assert_format!(
         "fn main() {
@@ -2231,10 +3211,27 @@ fn expr_todo() {
 }
 "
     );
+}
 
+#[test]
+fn expr_todo_with_label() {
     assert_format!(
         r#"fn main() {
   todo("todo with a label")
+}
+"#
+    );
+}
+
+#[test]
+fn expr_todo1() {
+    assert_format_rewrite!(
+        r#"fn main() {
+  fn() {}
+}
+"#,
+        r#"fn main() {
+  fn() { todo }
 }
 "#
     );
@@ -3030,8 +4027,8 @@ fn concise_wrapping_of_simple_lists() {
     assert_format!(
         "pub fn main() {
   [
-    1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0, 1.00, 11.0, 12.0, 13.0, 14.0,
-    15.0, 16.0, 17.0, 18.0, 19.0, 2.00,
+    1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0, 1.0, 11.0, 12.0, 13.0, 14.0,
+    15.0, 16.0, 17.0, 18.0, 19.0, 2.0,
   ]
 }
 "
@@ -3057,8 +4054,8 @@ fn concise_wrapping_of_simple_lists() {
 
     assert_format!(
         "const values = [
-  1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0, 1.00, 11.0, 12.0, 13.0, 14.0,
-  15.0, 16.0, 17.0, 18.0, 19.0, 2.00,
+  1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0, 1.0, 11.0, 12.0, 13.0, 14.0, 15.0,
+  16.0, 17.0, 18.0, 19.0, 2.0,
 ]
 "
     );
@@ -3087,8 +4084,8 @@ fn concise_wrapping_of_simple_bit_strings() {
     assert_format!(
         "pub fn main() {
   <<
-    1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0, 1.00, 11.0, 12.0, 13.0, 14.0,
-    15.0, 16.0, 17.0, 18.0, 19.0, 2.00,
+    1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0, 1.0, 11.0, 12.0, 13.0, 14.0,
+    15.0, 16.0, 17.0, 18.0, 19.0, 2.0,
   >>
 }
 "
@@ -3114,8 +4111,8 @@ fn concise_wrapping_of_simple_bit_strings() {
 
     assert_format!(
         "const values = <<
-  1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0, 1.00, 11.0, 12.0, 13.0, 14.0,
-  15.0, 16.0, 17.0, 18.0, 19.0, 2.00,
+  1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0, 1.0, 11.0, 12.0, 13.0, 14.0, 15.0,
+  16.0, 17.0, 18.0, 19.0, 2.0,
 >>
 "
     );
@@ -3237,7 +4234,7 @@ fn main() {
 fn assignments_break_value_first_test() {
     assert_format!(
         r#"fn main() {
-  assert Ok(1) = [
+  let assert Ok(1) = [
     10_000_000_000_000_000_000_000_000_001,
     20_000_000_000_000_000_000_000_000_001,
     30_000_000_000_000_000_000_000_000_001,
@@ -3250,7 +4247,7 @@ fn assignments_break_value_first_test() {
 
     assert_format!(
         r#"fn main() {
-  assert Ok(1) = [
+  let assert Ok(1) = [
     1_000_000_000_000_000_000_000_000_000, 2_000_000_000_000_000_000_000_000_000,
     3_000_000_000_000_000_000_000_000_000, 4_000_000_000_000_000_000_000_000_000,
   ]
@@ -3261,7 +4258,7 @@ fn assignments_break_value_first_test() {
 
     assert_format!(
         r#"fn main() {
-  assert <<11, 2, 4, 5, 6>> = [
+  let assert <<11, 2, 4, 5, 6>> = [
     10_000_000_000_000_000_000_000_000_001,
     20_000_000_000_000_000_000_000_000_001,
     30_000_000_000_000_000_000_000_000_001,
@@ -3274,7 +4271,7 @@ fn assignments_break_value_first_test() {
 
     assert_format!(
         r#"fn main() {
-  assert <<11, 2, 4, 5, 6>> = [
+  let assert <<11, 2, 4, 5, 6>> = [
     1_000_000_000_000_000_000_000_000_000, 2_000_000_000_000_000_000_000_000_000,
     3_000_000_000_000_000_000_000_000_000, 4_000_000_000_000_000_000_000_000_000,
   ]
@@ -3285,7 +4282,7 @@ fn assignments_break_value_first_test() {
 
     assert_format!(
         r#"fn main() {
-  assert [11, 2, 4, 5, 6] = [
+  let assert [11, 2, 4, 5, 6] = [
     10_000_000_000_000_000_000_000_000_001,
     20_000_000_000_000_000_000_000_000_001,
     30_000_000_000_000_000_000_000_000_001,
@@ -3298,7 +4295,7 @@ fn assignments_break_value_first_test() {
 
     assert_format!(
         r#"fn main() {
-  assert [11, 2, 4, 5, 6] = [
+  let assert [11, 2, 4, 5, 6] = [
     1_000_000_000_000_000_000_000_000_000, 2_000_000_000_000_000_000_000_000_000,
     3_000_000_000_000_000_000_000_000_000, 4_000_000_000_000_000_000_000_000_000,
   ]
@@ -3365,15 +4362,15 @@ fn let_as_expression() {
 fn assert_as_expression() {
     assert_format!(
         "pub fn main() {
-  assert x = 1
+  let assert x = 1
 }
 "
     );
 
     assert_format!(
         "pub fn main() {
-  assert x = {
-    assert y = 1
+  let assert x = {
+    let assert y = 1
   }
 }
 "
@@ -3631,7 +4628,7 @@ fn list_at_end_of_long_expr_line() {
 fn list_at_end_of_long_pattern_line() {
     assert_format!(
         "pub fn example() {
-  assert LongLongLongLongLongLongLongLongLongLongLongLongLongLongLongLongLongLongLongLongLong([]) =
+  let assert LongLongLongLongLongLongLongLongLongLongLongLongLongLongLongLongLongLongLongLongLong([]) =
     1
 }
 "
@@ -3826,8 +4823,8 @@ fn case_subject_block() {
         r#"pub fn main() {
   case
     {
-      assert Ok(x) = thing()
-      assert Ok(y) = thing()
+      let assert Ok(x) = thing()
+      let assert Ok(y) = thing()
       x + y
     }
   {
@@ -3903,7 +4900,7 @@ fn multiple_line_spread_list_comments() {
 fn list_spread_comment_pattern() {
     assert_format!(
         r#"fn main() {
-  assert [
+  let assert [
     1,
     // Spread!
     // Spread?
@@ -3919,7 +4916,7 @@ fn list_spread_comment_pattern() {
 fn list_spread_discard_comment_pattern() {
     assert_format!(
         r#"fn main() {
-  assert [
+  let assert [
     1,
     // Spread!
     // Spread?
@@ -3967,6 +4964,20 @@ fn not_add() {
     assert_format!(
         r#"pub fn main() {
   !{ 1 + 3 }
+}
+"#
+    );
+}
+
+#[test]
+fn deprecated_assert() {
+    assert_format_rewrite!(
+        r#"fn main(x) {
+  assert True = x
+}
+"#,
+        r#"fn main(x) {
+  let assert True = x
 }
 "#
     );

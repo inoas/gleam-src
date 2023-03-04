@@ -14,6 +14,7 @@ use crate::{
     warning, Error, Result, Warning,
 };
 use itertools::Itertools;
+use smol_str::SmolStr;
 use std::{
     collections::{HashMap, HashSet},
     fmt::Write,
@@ -22,7 +23,7 @@ use std::{
     time::Instant,
 };
 
-use super::ErlangAppCodegenConfiguration;
+use super::{Codegen, ErlangAppCodegenConfiguration};
 
 // On Windows we have to call rebar3 via a little wrapper script.
 //
@@ -40,12 +41,7 @@ const ELIXIR_EXECUTABLE: &str = "elixir.bat";
 pub struct Options {
     pub mode: Mode,
     pub target: Option<Target>,
-    /// Whether to perform codegen for the root project. Dependencies always
-    /// have codegen run. Use for the `gleam check` command.
-    /// If future when we have per-module incremental builds we will need to
-    /// track both whether type metadata has been produced and also whether
-    /// codegen has been performed. As such there will be 2 kinds of caching.
-    pub perform_codegen: bool,
+    pub codegen: Codegen,
 }
 
 #[derive(Debug)]
@@ -53,8 +49,8 @@ pub struct ProjectCompiler<IO> {
     // The gleam.toml config for the root package of the project
     config: PackageConfig,
     packages: HashMap<String, ManifestPackage>,
-    importable_modules: im::HashMap<String, type_::Module>,
-    defined_modules: im::HashMap<String, PathBuf>,
+    importable_modules: im::HashMap<SmolStr, type_::Module>,
+    defined_modules: im::HashMap<SmolStr, PathBuf>,
     warnings: Vec<Warning>,
     telemetry: Box<dyn Telemetry>,
     options: Options,
@@ -98,7 +94,7 @@ where
         }
     }
 
-    pub fn get_importable_modules(&self) -> &im::HashMap<String, type_::Module> {
+    pub fn get_importable_modules(&self) -> &im::HashMap<SmolStr, type_::Module> {
         &self.importable_modules
     }
 
@@ -133,10 +129,9 @@ where
         self.check_gleam_version()?;
         self.compile_dependencies()?;
 
-        if self.options.perform_codegen {
-            self.telemetry.compiling_package(&self.config.name);
-        } else {
-            self.telemetry.checking_package(&self.config.name);
+        match self.options.codegen {
+            Codegen::All => self.telemetry.compiling_package(&self.config.name),
+            Codegen::DepsOnly | Codegen::None => self.telemetry.checking_package(&self.config.name),
         }
         let result = self.compile_root_package();
 
@@ -189,7 +184,10 @@ where
         let sequence = order_packages(&self.packages)?;
 
         for name in sequence {
-            let package = self.packages.remove(&name).expect("Missing package config");
+            let package = self
+                .packages
+                .remove(name.as_str())
+                .expect("Missing package config");
             self.load_cache_or_compile_package(&package)?;
         }
 
@@ -220,55 +218,36 @@ where
         result
     }
 
+    // TODO: extract and unit test
     fn compile_rebar3_dep_package(&mut self, package: &ManifestPackage) -> Result<(), Error> {
         let name = &package.name;
         let mode = self.mode();
         let target = self.target();
 
-        let project_dir = paths::build_deps_package(name);
-        let up = paths::unnest(&project_dir);
-        let rebar3_path = |path: &Path| up.join(path).to_str().unwrap_or_default().to_string();
-        let ebins = paths::build_packages_ebins_glob(mode, target);
-        let erl_libs = paths::build_packages_erl_libs_glob(mode, target);
-        let dest = paths::build_package(mode, target, name);
-
-        // rebar3 would make this if it didn't exist, but we make it anyway as
-        // we may need to copy the include, priv, and/or ebin directory into there
-        self.io.mkdir(&dest)?;
-
-        // TODO: unit test
-        let src_include = project_dir.join("include");
-        if self.io.is_directory(&src_include) {
-            tracing::debug!("copying_include_to_build");
-            // TODO: This could be a symlink
-            self.io.copy_dir(&src_include, &dest)?;
-        }
-
-        // TODO: unit test
-        let priv_dir = project_dir.join("priv");
-        if self.io.is_directory(&priv_dir) {
-            tracing::debug!("copying_priv_to_build");
-            // TODO: This could be a symlink
-            self.io.copy_dir(&priv_dir, &dest)?;
-        }
-
-        // TODO: unit test
-        let ebin_dir = project_dir.join("ebin");
-        if self.io.is_directory(&ebin_dir) {
-            tracing::debug!("copying_ebin_to_build");
-            // TODO: This could be a symlink
-            self.io.copy_dir(&ebin_dir, &dest)?;
+        // TODO: test
+        if !self.options.codegen.should_codegen(false) {
+            tracing::info!(%name, "skipping_mix_build_as_codegen_disabled");
         }
 
         // TODO: test
         if target != Target::Erlang {
-            tracing::info!("skipping_rebar3_build_for_non_erlang_target");
+            tracing::info!(%name, "skipping_rebar3_build_for_non_erlang_target");
             return Ok(());
         }
 
+        let package = paths::build_deps_package(name);
+        let build_packages = paths::build_packages(mode, target);
+        let ebins = paths::build_packages_ebins_glob(mode, target);
+        let package_build = paths::build_package(mode, target, name);
+        let rebar3_path = |path: &Path| format!("../{}", path.to_str().expect("Build path"));
+
+        tracing::debug!("copying_package_to_build");
+        self.io.mkdir(&build_packages)?;
+        self.io.copy_dir(&package, &build_packages)?;
+
         let env = [
-            ("ERL_LIBS", rebar3_path(&erl_libs)),
-            ("REBAR_BARE_COMPILER_OUTPUT_DIR", rebar3_path(&dest)),
+            ("ERL_LIBS", "../*/ebin".into()),
+            ("REBAR_BARE_COMPILER_OUTPUT_DIR", "./".into()),
             ("REBAR_PROFILE", "prod".into()),
             ("TERM", "dumb".into()),
         ];
@@ -276,13 +255,13 @@ where
             "bare".into(),
             "compile".into(),
             "--paths".into(),
-            rebar3_path(&ebins),
+            "../*/ebin".into(),
         ];
         let status = self.io.exec(
             REBAR_EXECUTABLE,
             &args,
             &env,
-            Some(&project_dir),
+            Some(&package_build),
             self.subprocess_stdio,
         )?;
 
@@ -290,7 +269,7 @@ where
             Ok(())
         } else {
             Err(Error::ShellCommand {
-                program: "rebar3".to_string(),
+                program: "rebar3".into(),
                 err: None,
             })
         }
@@ -303,8 +282,13 @@ where
         let mix_target = "prod";
 
         // TODO: test
+        if !self.options.codegen.should_codegen(false) {
+            tracing::info!(%name, "skipping_mix_build_as_codegen_disabled");
+        }
+
+        // TODO: test
         if target != Target::Erlang {
-            tracing::info!("skipping_mix_build_for_non_erlang_target");
+            tracing::info!(%name, "skipping_mix_build_for_non_erlang_target");
             return Ok(());
         }
 
@@ -375,7 +359,7 @@ where
             Ok(())
         } else {
             Err(Error::ShellCommand {
-                program: "mix".to_string(),
+                program: "mix".into(),
                 err: None,
             })
         }
@@ -395,12 +379,12 @@ where
         build_dir: PathBuf,
         package: &ManifestPackage,
     ) -> Result<(), Error> {
-        for path in self.io.gleam_metadata_files(&build_dir) {
+        for path in self.io.gleam_cache_files(&build_dir) {
             let reader = BufReader::new(self.io.reader(&path)?);
             let module = metadata::ModuleDecoder::new(self.ids.clone()).read(reader)?;
             let _ = self
                 .importable_modules
-                .insert(module.name.join("/"), module)
+                .insert(module.name.clone(), module)
                 .ok_or(())
                 .expect_err("Metadata loaded for already loaded module");
         }
@@ -438,7 +422,8 @@ where
         );
         compiler.write_metadata = true;
         compiler.write_entrypoint = is_root;
-        compiler.compile_beam_bytecode = !is_root || self.options.perform_codegen;
+        compiler.perform_codegen = self.options.codegen.should_codegen(is_root);
+        compiler.compile_beam_bytecode = self.options.codegen.should_codegen(is_root);
         compiler.subprocess_stdio = self.subprocess_stdio;
 
         // Compile project to Erlang or JavaScript source code
@@ -452,11 +437,16 @@ where
     }
 }
 
-fn order_packages(packages: &HashMap<String, ManifestPackage>) -> Result<Vec<String>, Error> {
+fn order_packages(packages: &HashMap<String, ManifestPackage>) -> Result<Vec<SmolStr>, Error> {
     dep_tree::toposort_deps(
         packages
             .values()
-            .map(|package| (package.name.clone(), package.requirements.clone()))
+            .map(|package| {
+                (
+                    package.name.as_str().into(),
+                    package.requirements.iter().map(|r| r.into()).collect(),
+                )
+            })
             .collect(),
     )
     .map_err(convert_deps_tree_error)
@@ -499,6 +489,6 @@ pub(crate) fn usable_build_tool(package: &ManifestPackage) -> Result<BuildTool, 
 }
 
 pub struct CheckpointState {
-    importable_modules: im::HashMap<String, type_::Module>,
-    defined_modules: im::HashMap<String, PathBuf>,
+    importable_modules: im::HashMap<SmolStr, type_::Module>,
+    defined_modules: im::HashMap<SmolStr, PathBuf>,
 }

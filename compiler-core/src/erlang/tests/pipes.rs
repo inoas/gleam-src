@@ -8,7 +8,10 @@ fn clever_pipe_rewriting() {
 pub fn apply(f: fn(a) -> b, a: a) { a |> f }
 "#
     );
+}
 
+#[test]
+fn clever_pipe_rewriting1() {
     // a |> b(c)
     assert_erl!(
         r#"
@@ -108,6 +111,26 @@ pub fn main() {
 
 pub fn add(x) {
   fn(y) { x + y }
+}
+"#
+    );
+}
+
+// https://github.com/gleam-lang/gleam/issues/1931
+#[test]
+fn pipe_in_call() {
+    assert_erl!(
+        r#"
+pub fn main() {
+  123
+  |> two(
+    1 |> two(2),
+    _,
+  )
+}
+
+pub fn two(a, b) {
+  a
 }
 "#
     );

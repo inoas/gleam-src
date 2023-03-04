@@ -2,8 +2,10 @@ mod assert;
 mod bit_strings;
 mod case;
 mod external_fn;
+mod functions;
 mod guards;
 mod numbers;
+mod panic;
 mod patterns;
 mod pipes;
 mod records;
@@ -25,28 +27,28 @@ macro_rules! assert_erl {
         // TODO: Currently we do this here and also in the tests. It would be better
         // to have one place where we create all this required state for use in each
         // place.
-        let _ = modules.insert("gleam".to_string(), $crate::type_::build_prelude(&ids));
+        let _ = modules.insert("gleam".into(), $crate::type_::build_prelude(&ids));
         let (mut ast, _) = $crate::parse::parse_module($dep_src).expect("dep syntax error");
-        ast.name = $dep_name;
-        let dep = $crate::type_::infer_module(
+        ast.name = $dep_name.into();
+        let dep = $crate::analyse::infer_module(
             $crate::build::Target::JavaScript,
             &ids,
             ast,
             $crate::build::Origin::Src,
-            $dep_package,
+            &$dep_package.into(),
             &modules,
             &mut vec![],
         )
         .expect("should successfully infer");
-        let _ = modules.insert($dep_name.join("/"), dep.type_info);
+        let _ = modules.insert($dep_name.into(), dep.type_info);
         let (mut ast, _) = $crate::parse::parse_module($src).expect("syntax error");
-        ast.name = vec!["my".to_string(), "mod".to_string()];
-        let ast = $crate::type_::infer_module(
+        ast.name = "my/mod".into();
+        let ast = $crate::analyse::infer_module(
             $crate::build::Target::Erlang,
             &ids,
             ast,
             $crate::build::Origin::Src,
-            "thepackage",
+            &"thepackage".into(),
             &modules,
             &mut vec![],
         )
@@ -58,27 +60,24 @@ macro_rules! assert_erl {
 
     ($src:expr $(,)?) => {{
         use $crate::{
-            build::Origin,
-            erlang::module,
-            line_numbers::LineNumbers,
-            type_::{build_prelude, infer_module},
+            build::Origin, erlang::module, line_numbers::LineNumbers, type_::build_prelude,
             uid::UniqueIdGenerator,
         };
         let (mut ast, _) = $crate::parse::parse_module($src).expect("syntax error");
-        ast.name = vec!["the_app".to_string()];
+        ast.name = "the_app".into();
         let mut modules = im::HashMap::new();
         let ids = UniqueIdGenerator::new();
         // DUPE: preludeinsertion
         // TODO: Currently we do this here and also in the tests. It would be better
         // to have one place where we create all this required state for use in each
         // place.
-        let _ = modules.insert("gleam".to_string(), build_prelude(&ids));
-        let ast = infer_module(
+        let _ = modules.insert("gleam".into(), build_prelude(&ids));
+        let ast = $crate::analyse::infer_module(
             $crate::build::Target::Erlang,
             &ids,
             ast,
             Origin::Src,
-            "thepackage",
+            &"thepackage".into(),
             &modules,
             &mut vec![],
         )
@@ -97,7 +96,10 @@ let x = #(100000000000000000, #(2000000000, 3000000000000, 40000000000), 50000, 
   x
 }"#
     );
+}
 
+#[test]
+fn integration_test0_1() {
     assert_erl!(
         r#"pub fn go() {
   let y = 1
@@ -105,7 +107,10 @@ let x = #(100000000000000000, #(2000000000, 3000000000000, 40000000000), 50000, 
   y
 }"#
     );
+}
 
+#[test]
+fn integration_test0_2() {
     // hex, octal, and binary literals
     assert_erl!(
         r#"pub fn go() {
@@ -115,7 +120,10 @@ let x = #(100000000000000000, #(2000000000, 3000000000000, 40000000000), 50000, 
   fifteen
 }"#
     );
+}
 
+#[test]
+fn integration_test0_3() {
     assert_erl!(
         r#"pub fn go() {
   let y = 1
@@ -364,7 +372,10 @@ fn main() {
 }
 "#
     );
+}
 
+#[test]
+fn field_access_function_call1() {
     // Parentheses are added when calling functions returned by tuple access
     assert_erl!(
         r#"
@@ -449,7 +460,11 @@ fn allowed_string_escapes() {
 #[test]
 fn keyword_constructors() {
     assert_erl!("pub type X { Div }");
+}
 
+// https://github.com/gleam-lang/gleam/issues/1006
+#[test]
+fn keyword_constructors1() {
     assert_erl!("pub type X { Fun(Int) }");
 }
 

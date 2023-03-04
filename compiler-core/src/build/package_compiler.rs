@@ -1,8 +1,10 @@
 use crate::{
     ast::{SrcSpan, TypedModule, UntypedModule},
     build::{
-        dep_tree, native_file_copier::NativeFileCopier, package_loader::PackageLoader, Mode,
-        Module, Origin, Package, Target,
+        dep_tree,
+        native_file_copier::NativeFileCopier,
+        package_loader::{CodegenRequired, PackageLoader},
+        Mode, Module, Origin, Package, Target,
     },
     codegen::{Erlang, ErlangApp, JavaScript, TypeScriptDeclarations},
     config::PackageConfig,
@@ -15,6 +17,7 @@ use crate::{
     Error, Result, Warning,
 };
 use askama::Template;
+use smol_str::SmolStr;
 use std::{collections::HashMap, fmt::write, time::SystemTime};
 use std::{
     collections::HashSet,
@@ -85,18 +88,24 @@ where
     pub fn compile(
         mut self,
         warnings: &mut Vec<Warning>,
-        existing_modules: &mut im::HashMap<String, type_::Module>,
-        already_defined_modules: &mut im::HashMap<String, PathBuf>,
+        existing_modules: &mut im::HashMap<SmolStr, type_::Module>,
+        already_defined_modules: &mut im::HashMap<SmolStr, PathBuf>,
     ) -> Result<Vec<Module>, Error> {
         let span = tracing::info_span!("compile", package = %self.config.name.as_str());
         let _enter = span.enter();
 
         let artefact_directory = self.out.join(paths::ARTEFACT_DIRECTORY_NAME);
+        let codegen_required = if self.perform_codegen {
+            CodegenRequired::Yes
+        } else {
+            CodegenRequired::No
+        };
         let loaded = PackageLoader::new(
             self.io.clone(),
             self.ids.clone(),
             self.mode,
             self.root,
+            codegen_required,
             &artefact_directory,
             self.target.target(),
             &self.config.name,
@@ -106,12 +115,7 @@ where
 
         // Load the cached modules that have previously been compiled
         for module in loaded.cached.into_iter() {
-            _ = existing_modules.insert(module.name.join("/"), module.clone());
-        }
-
-        if loaded.to_compile.is_empty() {
-            tracing::info!("no_modules_to_compile");
-            return Ok(vec![]);
+            _ = existing_modules.insert(module.name.clone(), module.clone());
         }
 
         // Type check the modules that are new or have changed
@@ -133,6 +137,11 @@ where
     }
 
     fn compile_erlang_to_beam(&mut self, modules: &HashSet<PathBuf>) -> Result<(), Error> {
+        if modules.is_empty() {
+            tracing::info!("no_erlang_to_compile");
+            return Ok(());
+        }
+
         tracing::info!("compiling_erlang");
 
         let escript_path = self
@@ -167,7 +176,7 @@ where
             Ok(())
         } else {
             Err(Error::ShellCommand {
-                program: "escript".to_string(),
+                program: "escript".into(),
                 err: None,
             })
         }
@@ -204,18 +213,21 @@ where
 
     fn encode_and_write_metadata(&mut self, modules: &[Module]) -> Result<()> {
         if !self.write_metadata {
-            tracing::info!("Package metadata writing disabled");
+            tracing::info!("package_metadata_writing_disabled");
+            return Ok(());
+        }
+        if modules.is_empty() {
             return Ok(());
         }
 
         let artefact_dir = self.out.join(paths::ARTEFACT_DIRECTORY_NAME);
 
-        tracing::info!("Writing package metadata to disc");
+        tracing::info!("writing_module_caches");
         for module in modules {
             let module_name = module.name.replace('/', "@");
 
             // Write metadata file
-            let name = format!("{}.gleam_module", &module_name);
+            let name = format!("{}.cache", &module_name);
             let path = artefact_dir.join(name);
             let bytes = ModuleEncoder::new(&module.ast.type_info).encode()?;
             self.io.write_bytes(&path, &bytes)?;
@@ -225,6 +237,7 @@ where
             let path = artefact_dir.join(name);
             let info = CacheMetadata {
                 mtime: module.mtime,
+                codegen_performed: self.perform_codegen,
                 dependencies: module.dependencies_list(),
             };
             self.io.write_bytes(&path, &info.to_binary())?;
@@ -260,12 +273,6 @@ where
 
         io.mkdir(&build_dir)?;
 
-        if self.write_entrypoint {
-            self.render_entrypoint_module(&build_dir, &mut written)?;
-        } else {
-            tracing::info!("skipping_entrypoint_generation");
-        }
-
         if self.copy_native_files {
             self.copy_project_native_files(&build_dir, &mut written)?;
         } else {
@@ -278,6 +285,12 @@ where
                 &self.config,
                 modules,
             )?;
+        }
+
+        if self.compile_beam_bytecode && self.write_entrypoint {
+            self.render_erlang_entrypoint_module(&build_dir, &mut written)?;
+        } else {
+            tracing::info!("skipping_entrypoint_generation");
         }
 
         // NOTE: This must come after `copy_project_native_files` to ensure that
@@ -311,12 +324,14 @@ where
 
         if self.copy_native_files {
             self.copy_project_native_files(&self.out, &mut written)?;
+        } else {
+            tracing::info!("skipping_native_file_copying");
         }
+
         Ok(())
     }
 
-    // TODO: test that the entrypoint is not written if it already exists
-    fn render_entrypoint_module(
+    fn render_erlang_entrypoint_module(
         &mut self,
         out: &Path,
         modules_to_compile: &mut HashSet<PathBuf>,
@@ -343,11 +358,11 @@ where
 }
 
 fn type_check(
-    package_name: &str,
+    package_name: &SmolStr,
     target: Target,
     ids: &UniqueIdGenerator,
     mut parsed_modules: Vec<UncompiledModule>,
-    module_types: &mut im::HashMap<String, type_::Module>,
+    module_types: &mut im::HashMap<SmolStr, type_::Module>,
     warnings: &mut Vec<Warning>,
 ) -> Result<Vec<Module>, Error> {
     let mut modules = Vec::with_capacity(parsed_modules.len() + 1);
@@ -357,7 +372,7 @@ fn type_check(
     // TODO: Currently we do this here and also in the tests. It would be better
     // to have one place where we create all this required state for use in each
     // place.
-    let _ = module_types.insert("gleam".to_string(), type_::build_prelude(ids));
+    let _ = module_types.insert("gleam".into(), type_::build_prelude(ids));
 
     for UncompiledModule {
         name,
@@ -373,7 +388,7 @@ fn type_check(
     {
         tracing::debug!(module = ?name, "Type checking");
         let mut type_warnings = Vec::new();
-        let ast = type_::infer_module(
+        let ast = crate::analyse::infer_module(
             target,
             ids,
             ast,
@@ -460,7 +475,7 @@ pub fn maybe_link_elixir_libs<IO: CommandExecutor + FileSystemIO + Clone>(
         )?;
         if status != 0 {
             return Err(Error::ShellCommand {
-                program: "elixir".to_string(),
+                program: "elixir".into(),
                 err: None,
             });
         }
@@ -496,7 +511,7 @@ pub fn maybe_link_elixir_libs<IO: CommandExecutor + FileSystemIO + Clone>(
     Ok(())
 }
 
-pub(crate) fn module_name(package_path: &Path, full_module_path: &Path) -> String {
+pub(crate) fn module_name(package_path: &Path, full_module_path: &Path) -> SmolStr {
     // /path/to/project/_build/default/lib/the_package/src/my/module.gleam
 
     // my/module.gleam
@@ -515,7 +530,7 @@ pub(crate) fn module_name(package_path: &Path, full_module_path: &Path) -> Strin
         .to_string();
 
     // normalise windows paths
-    name.replace("\\", "/")
+    name.replace("\\", "/").into()
 }
 
 #[derive(Debug)]
@@ -525,7 +540,7 @@ pub(crate) enum Input {
 }
 
 impl Input {
-    pub fn name(&self) -> &str {
+    pub fn name(&self) -> &SmolStr {
         match self {
             Input::New(m) => &m.name,
             Input::Cached(m) => &m.name,
@@ -539,26 +554,43 @@ impl Input {
         }
     }
 
-    pub fn dependencies(&self) -> Vec<String> {
+    pub fn dependencies(&self) -> Vec<SmolStr> {
         match self {
             Input::New(m) => m.dependencies.iter().map(|(n, _)| n.clone()).collect(),
             Input::Cached(m) => m.dependencies.clone(),
         }
     }
+
+    /// Returns `true` if the input is [`New`].
+    ///
+    /// [`New`]: Input::New
+    #[must_use]
+    pub(crate) fn is_new(&self) -> bool {
+        matches!(self, Self::New(..))
+    }
+
+    /// Returns `true` if the input is [`Cached`].
+    ///
+    /// [`Cached`]: Input::Cached
+    #[must_use]
+    pub(crate) fn is_cached(&self) -> bool {
+        matches!(self, Self::Cached(..))
+    }
 }
 
 #[derive(Debug)]
 pub(crate) struct CachedModule {
-    pub name: String,
+    pub name: SmolStr,
     pub origin: Origin,
-    pub dependencies: Vec<String>,
+    pub dependencies: Vec<SmolStr>,
     pub source_path: PathBuf,
 }
 
 #[derive(Debug, serde::Serialize, serde::Deserialize)]
 pub(crate) struct CacheMetadata {
     pub mtime: SystemTime,
-    pub dependencies: Vec<String>,
+    pub codegen_performed: bool,
+    pub dependencies: Vec<SmolStr>,
 }
 
 impl CacheMetadata {
@@ -571,21 +603,21 @@ impl CacheMetadata {
     }
 }
 
-#[derive(Debug, Default)]
+#[derive(Debug, Default, PartialEq, Eq)]
 pub(crate) struct Loaded {
     pub to_compile: Vec<UncompiledModule>,
     pub cached: Vec<type_::Module>,
 }
 
-#[derive(Debug)]
+#[derive(Debug, PartialEq, Eq)]
 pub(crate) struct UncompiledModule {
     pub path: PathBuf,
-    pub name: String,
-    pub code: String,
+    pub name: SmolStr,
+    pub code: SmolStr,
     pub mtime: SystemTime,
     pub origin: Origin,
-    pub package: String,
-    pub dependencies: Vec<(String, SrcSpan)>,
+    pub package: SmolStr,
+    pub dependencies: Vec<(SmolStr, SrcSpan)>,
     pub ast: UntypedModule,
     pub extra: ModuleExtra,
 }

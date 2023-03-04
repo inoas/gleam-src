@@ -2,16 +2,20 @@ use crate::error::{FileIoAction, FileKind};
 use crate::io::FileSystemReader;
 use crate::manifest::Manifest;
 use crate::{Error, Result};
+use globset::{Glob, GlobSetBuilder};
 use hexpm::version::{Range, Version};
 use http::Uri;
 use serde::Deserialize;
+use smol_str::SmolStr;
 use std::collections::{HashMap, HashSet};
+use std::fmt;
+use std::marker::PhantomData;
 use std::path::{Path, PathBuf};
 
 #[cfg(test)]
 use crate::manifest::ManifestPackage;
 
-use crate::build::{Mode, Target};
+use crate::build::{Mode, Runtime, Target};
 
 fn default_version() -> Version {
     Version::parse("0.1.0").expect("default version")
@@ -19,6 +23,10 @@ fn default_version() -> Version {
 
 fn erlang_target() -> Target {
     Target::Erlang
+}
+
+fn default_javascript_runtime() -> Runtime {
+    Runtime::NodeJs
 }
 
 pub type Dependencies = HashMap<String, Range>;
@@ -42,8 +50,7 @@ impl<'de> Deserialize<'de> for SpdxLicense {
         let s: &str = serde::de::Deserialize::deserialize(deserializer)?;
         match spdx::license_id(s) {
             None => Err(serde::de::Error::custom(format!(
-                "{} is not a valid SPDX License ID",
-                s
+                "{s} is not a valid SPDX License ID"
             ))),
             Some(_) => Ok(SpdxLicense {
                 licence: String::from(s),
@@ -61,13 +68,13 @@ impl AsRef<str> for SpdxLicense {
 #[derive(Deserialize, Debug, PartialEq, Clone)]
 pub struct PackageConfig {
     #[serde(with = "package_name")]
-    pub name: String,
+    pub name: SmolStr,
     #[serde(default = "default_version")]
     pub version: Version,
     #[serde(default, alias = "licenses")]
     pub licences: Vec<SpdxLicense>,
     #[serde(default)]
-    pub description: String,
+    pub description: SmolStr,
     #[serde(default, alias = "docs")]
     pub documentation: Docs,
     #[serde(default)]
@@ -84,6 +91,8 @@ pub struct PackageConfig {
     pub javascript: JavaScriptConfig,
     #[serde(default = "erlang_target")]
     pub target: Target,
+    #[serde(default)]
+    pub internal_modules: Option<Vec<Glob>>,
 }
 
 impl PackageConfig {
@@ -137,6 +146,31 @@ impl PackageConfig {
                 StalePackageRemover::fresh_and_locked(&self.all_dependencies()?, manifest)
             }
         })
+    }
+
+    /// Determines whether the given module should be hidden in the docs or not
+    ///
+    /// The developer can specify a list of glob patterns in the gleam.toml file
+    /// to determine modules that should not be shown in the package's documentation
+    pub fn is_internal_module(&self, module: &str) -> bool {
+        let package = &self.name;
+        match &self.internal_modules {
+            Some(globs) => {
+                let mut builder = GlobSetBuilder::new();
+                for glob in globs {
+                    _ = builder.add(glob.clone());
+                }
+                builder.build()
+            }
+
+            // If no patterns were specified in the config then we use a default value
+            None => GlobSetBuilder::new()
+                .add(Glob::new(&format!("{package}/internal")).expect("internal module glob"))
+                .add(Glob::new(&format!("{package}/internal/*")).expect("internal module glob"))
+                .build(),
+        }
+        .expect("internal module globs")
+        .is_match(module)
     }
 }
 
@@ -377,6 +411,106 @@ fn locked_nested_are_removed_too() {
     );
 }
 
+#[test]
+fn default_internal_modules() {
+    // When no internal modules are specified then we default to
+    // `["$package/internal", "$package/internal/*"]`
+    let mut config = PackageConfig::default();
+    config.name = "my_package".into();
+    config.internal_modules = None;
+
+    assert!(config.is_internal_module("my_package/internal"));
+    assert!(config.is_internal_module("my_package/internal/wibble"));
+    assert!(config.is_internal_module("my_package/internal/wibble/wobble"));
+    assert!(!config.is_internal_module("my_package/internallll"));
+    assert!(!config.is_internal_module("my_package/other"));
+    assert!(!config.is_internal_module("my_package/other/wibble"));
+    assert!(!config.is_internal_module("other/internal"));
+}
+
+#[test]
+fn no_internal_modules() {
+    // When no internal modules are specified then we default to
+    // `["$package/internal", "$package/internal/*"]`
+    let mut config = PackageConfig::default();
+    config.name = "my_package".into();
+    config.internal_modules = Some(vec![]);
+
+    assert!(!config.is_internal_module("my_package/internal"));
+    assert!(!config.is_internal_module("my_package/internal/wibble"));
+    assert!(!config.is_internal_module("my_package/internal/wibble/wobble"));
+    assert!(!config.is_internal_module("my_package/internallll"));
+    assert!(!config.is_internal_module("my_package/other"));
+    assert!(!config.is_internal_module("my_package/other/wibble"));
+    assert!(!config.is_internal_module("other/internal"));
+}
+
+#[test]
+fn hidden_a_directory_from_docs() {
+    let mut config = PackageConfig::default();
+    config.internal_modules = Some(vec![Glob::new("package/internal/*").expect("")]);
+
+    let mod1 = "package/internal";
+    let mod2 = "package/internal/module";
+
+    assert_eq!(config.is_internal_module(mod1), false);
+    assert_eq!(config.is_internal_module(mod2), true);
+}
+
+#[test]
+fn hidden_two_directories_from_docs() {
+    let mut config = PackageConfig::default();
+    config.internal_modules = Some(vec![
+        Glob::new("package/internal1/*").expect(""),
+        Glob::new("package/internal2/*").expect(""),
+    ]);
+
+    let mod1 = "package/internal1";
+    let mod2 = "package/internal1/module";
+    let mod3 = "package/internal2";
+    let mod4 = "package/internal2/module";
+
+    assert_eq!(config.is_internal_module(mod1), false);
+    assert_eq!(config.is_internal_module(mod2), true);
+    assert_eq!(config.is_internal_module(mod3), false);
+    assert_eq!(config.is_internal_module(mod4), true);
+}
+
+#[test]
+fn hidden_a_directory_and_a_file_from_docs() {
+    let mut config = PackageConfig::default();
+    config.internal_modules = Some(vec![
+        Glob::new("package/internal1/*").expect(""),
+        Glob::new("package/module").expect(""),
+    ]);
+
+    let mod1 = "package/internal1";
+    let mod2 = "package/internal1/module";
+    let mod3 = "package/module";
+    let mod4 = "package/module/inner";
+
+    assert_eq!(config.is_internal_module(mod1), false);
+    assert_eq!(config.is_internal_module(mod2), true);
+    assert_eq!(config.is_internal_module(mod3), true);
+    assert_eq!(config.is_internal_module(mod4), false);
+}
+
+#[test]
+fn hidden_a_file_in_all_directories_from_docs() {
+    let mut config = PackageConfig::default();
+    config.internal_modules = Some(vec![Glob::new("package/*/module1").expect("")]);
+
+    let mod1 = "package/internal1/module1";
+    let mod2 = "package/internal2/module1";
+    let mod3 = "package/internal2/module2";
+    let mod4 = "package/module";
+
+    assert_eq!(config.is_internal_module(mod1), true);
+    assert_eq!(config.is_internal_module(mod2), true);
+    assert_eq!(config.is_internal_module(mod3), false);
+    assert_eq!(config.is_internal_module(mod4), false);
+}
+
 #[cfg(test)]
 fn manifest_package(
     name: &'static str,
@@ -416,6 +550,7 @@ impl Default for PackageConfig {
             dev_dependencies: Default::default(),
             licences: Default::default(),
             links: Default::default(),
+            internal_modules: Default::default(),
             target: Target::Erlang,
         }
     }
@@ -429,10 +564,87 @@ pub struct ErlangConfig {
     pub extra_applications: Vec<String>,
 }
 
-#[derive(Deserialize, Debug, PartialEq, Eq, Default, Clone, Copy)]
+#[derive(Deserialize, Debug, PartialEq, Default, Clone)]
 pub struct JavaScriptConfig {
     #[serde(default)]
     pub typescript_declarations: bool,
+    #[serde(default = "default_javascript_runtime")]
+    pub runtime: Runtime,
+    #[serde(default, rename = "deno")]
+    pub deno: DenoConfig,
+}
+
+#[derive(Deserialize, Debug, PartialEq, Eq, Clone)]
+pub enum DenoFlag {
+    AllowAll,
+    Allow(Vec<String>),
+}
+
+impl Default for DenoFlag {
+    fn default() -> Self {
+        Self::Allow(Vec::new())
+    }
+}
+
+fn bool_or_seq_string_to_deno_flag<'de, D>(deserializer: D) -> Result<DenoFlag, D::Error>
+where
+    D: serde::Deserializer<'de>,
+{
+    struct StringOrVec(PhantomData<Vec<String>>);
+
+    impl<'de> serde::de::Visitor<'de> for StringOrVec {
+        type Value = DenoFlag;
+
+        fn expecting(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+            formatter.write_str("bool or list of strings")
+        }
+
+        fn visit_bool<E>(self, value: bool) -> Result<Self::Value, E>
+        where
+            E: serde::de::Error,
+        {
+            if value {
+                Ok(DenoFlag::AllowAll)
+            } else {
+                Ok(DenoFlag::default())
+            }
+        }
+
+        fn visit_seq<S>(self, visitor: S) -> Result<Self::Value, S::Error>
+        where
+            S: serde::de::SeqAccess<'de>,
+        {
+            let allow: Vec<String> =
+                Deserialize::deserialize(serde::de::value::SeqAccessDeserializer::new(visitor))
+                    .unwrap_or_default();
+
+            Ok(DenoFlag::Allow(allow))
+        }
+    }
+
+    deserializer.deserialize_any(StringOrVec(PhantomData))
+}
+
+#[derive(Deserialize, Debug, PartialEq, Eq, Default, Clone)]
+pub struct DenoConfig {
+    #[serde(default, deserialize_with = "bool_or_seq_string_to_deno_flag")]
+    pub allow_env: DenoFlag,
+    #[serde(default)]
+    pub allow_sys: bool,
+    #[serde(default)]
+    pub allow_hrtime: bool,
+    #[serde(default, deserialize_with = "bool_or_seq_string_to_deno_flag")]
+    pub allow_net: DenoFlag,
+    #[serde(default)]
+    pub allow_ffi: bool,
+    #[serde(default, deserialize_with = "bool_or_seq_string_to_deno_flag")]
+    pub allow_read: DenoFlag,
+    #[serde(default, deserialize_with = "bool_or_seq_string_to_deno_flag")]
+    pub allow_run: DenoFlag,
+    #[serde(default, deserialize_with = "bool_or_seq_string_to_deno_flag")]
+    pub allow_write: DenoFlag,
+    #[serde(default)]
+    pub allow_all: bool,
 }
 
 #[derive(Deserialize, Debug, PartialEq, Eq, Clone)]
@@ -448,14 +660,10 @@ pub enum Repository {
 impl Repository {
     pub fn url(&self) -> Option<String> {
         match self {
-            Repository::GitHub { repo, user } => {
-                Some(format!("https://github.com/{}/{}", user, repo))
-            }
-            Repository::GitLab { repo, user } => {
-                Some(format!("https://gitlab.com/{}/{}", user, repo))
-            }
+            Repository::GitHub { repo, user } => Some(format!("https://github.com/{user}/{repo}")),
+            Repository::GitLab { repo, user } => Some(format!("https://gitlab.com/{user}/{repo}")),
             Repository::BitBucket { repo, user } => {
-                Some(format!("https://bitbucket.com/{}/{}", user, repo))
+                Some(format!("https://bitbucket.com/{user}/{repo}"))
             }
             Repository::Custom { url } => Some(url.clone()),
             Repository::None => None,
@@ -513,19 +721,20 @@ mod package_name {
     use lazy_static::lazy_static;
     use regex::Regex;
     use serde::Deserializer;
+    use smol_str::SmolStr;
 
     lazy_static! {
         static ref PACKAGE_NAME_PATTERN: Regex =
             Regex::new("^[a-z][a-z0-9_]*$").expect("Package name regex");
     }
 
-    pub fn deserialize<'de, D>(deserializer: D) -> Result<String, D::Error>
+    pub fn deserialize<'de, D>(deserializer: D) -> Result<SmolStr, D::Error>
     where
         D: Deserializer<'de>,
     {
         let name: &str = serde::de::Deserialize::deserialize(deserializer)?;
         if PACKAGE_NAME_PATTERN.is_match(name) {
-            Ok(name.to_string())
+            Ok(name.into())
         } else {
             let error =
                 "Package names may only container lowercase letters, numbers, and underscores";

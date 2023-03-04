@@ -59,6 +59,7 @@ mod config;
 mod dependencies;
 mod docs;
 mod export;
+mod fix;
 mod format;
 mod fs;
 mod hex;
@@ -79,7 +80,7 @@ pub use gleam_core::{
 };
 
 use gleam_core::{
-    build::{Mode, Options, Target},
+    build::{Codegen, Mode, Options, Runtime, Target},
     hex::RetirementReason,
 };
 use hex::ApiKeyCommand as _;
@@ -155,6 +156,13 @@ enum Command {
         check: bool,
     },
 
+    /// Rewrite deprecated Gleam code
+    Fix {
+        /// Files to fix
+        #[clap(default_value = ".")]
+        files: Vec<String>,
+    },
+
     /// Start an Erlang shell
     Shell,
 
@@ -162,8 +170,11 @@ enum Command {
     #[clap(trailing_var_arg = true)]
     Run {
         /// The platform to target
-        #[clap(long, ignore_case = true)]
+        #[clap(long, ignore_case = true, possible_values = Target::VARIANTS)]
         target: Option<Target>,
+
+        #[clap(long, ignore_case = true)]
+        runtime: Option<Runtime>,
 
         arguments: Vec<String>,
     },
@@ -172,8 +183,11 @@ enum Command {
     #[clap(trailing_var_arg = true)]
     Test {
         /// The platform to target
-        #[clap(long, ignore_case = true)]
+        #[clap(long, ignore_case = true, possible_values = Target::VARIANTS)]
         target: Option<Target>,
+
+        #[clap(long, ignore_case = true)]
+        runtime: Option<Runtime>,
 
         arguments: Vec<String>,
     },
@@ -213,6 +227,7 @@ enum Command {
 pub enum ExportTarget {
     /// Precompiled Erlang, suitable for deployment.
     ErlangShipment,
+    HexTarball,
 }
 
 #[derive(Args, Debug, Clone)]
@@ -367,6 +382,8 @@ fn main() {
             check,
         } => format::run(stdin, check, files),
 
+        Command::Fix { files } => fix::run(files),
+
         Command::Deps(Dependencies::List) => dependencies::list(),
 
         Command::Deps(Dependencies::Download) => {
@@ -379,9 +396,17 @@ fn main() {
 
         Command::Shell => shell::command(),
 
-        Command::Run { target, arguments } => run::command(arguments, target, run::Which::Src),
+        Command::Run {
+            target,
+            arguments,
+            runtime,
+        } => run::command(arguments, target, runtime, run::Which::Src),
 
-        Command::Test { target, arguments } => run::command(arguments, target, run::Which::Test),
+        Command::Test {
+            target,
+            arguments,
+            runtime,
+        } => run::command(arguments, target, runtime, run::Which::Test),
 
         Command::CompilePackage(opts) => compile_package::command(opts),
 
@@ -409,6 +434,7 @@ fn main() {
         Command::LanguageServer => lsp::main(),
 
         Command::Export(ExportTarget::ErlangShipment) => export::erlang_shipment(),
+        Command::Export(ExportTarget::HexTarball) => export::hex_tarball(),
     };
 
     match result {
@@ -427,7 +453,7 @@ fn main() {
 
 fn command_check() -> Result<(), Error> {
     let _ = build::main(Options {
-        perform_codegen: false,
+        codegen: Codegen::DepsOnly,
         mode: Mode::Dev,
         target: None,
     })?;
@@ -436,7 +462,7 @@ fn command_check() -> Result<(), Error> {
 
 fn command_build(target: Option<Target>) -> Result<(), Error> {
     let _ = build::main(Options {
-        perform_codegen: true,
+        codegen: Codegen::All,
         mode: Mode::Dev,
         target,
     })?;
@@ -445,7 +471,7 @@ fn command_build(target: Option<Target>) -> Result<(), Error> {
 
 fn print_config() -> Result<()> {
     let config = root_config()?;
-    println!("{:#?}", config);
+    println!("{config:#?}");
     Ok(())
 }
 
@@ -457,7 +483,7 @@ fn initialise_logger() {
     let enable_colours = std::env::var("GLEAM_LOG_NOCOLOUR").is_err();
     tracing_subscriber::fmt()
         .with_writer(std::io::stderr)
-        .with_env_filter(std::env::var("GLEAM_LOG").unwrap_or_else(|_| "off".to_string()))
+        .with_env_filter(std::env::var("GLEAM_LOG").unwrap_or_else(|_| "off".into()))
         .with_target(false)
         .with_ansi(enable_colours)
         .without_time()

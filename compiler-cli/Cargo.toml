@@ -1,6 +1,6 @@
 [package]
 name = "gleam"
-version = "0.25.3"
+version = "0.27.0"
 authors = ["Louis Pilfold <louis@lpil.uk>"]
 edition = "2021"
 license-file = "LICENCE"
@@ -39,7 +39,7 @@ hexpm = "2.0.0"
 # Allow user to type in sensitive information without showing it in the shell
 rpassword = "5.0.1"
 # Async runtime
-tokio = { version = "1.14.0", features = ["rt", "rt-multi-thread"] }
+tokio = { version = "1.24.2", features = ["rt", "rt-multi-thread"] }
 # Creation of tar file archives
 tar = "0.4.37"
 # gzip compression
@@ -76,6 +76,8 @@ lsp-server = "0.5"
 lsp-types = "0.92"
 # File locking
 fslock = "0.2.1"
+# Compact and cheap to clone immutable string type
+smol_str = "0.1"
 
 [target.'cfg(target_os = "windows")'.dependencies]
 # File URl decoding

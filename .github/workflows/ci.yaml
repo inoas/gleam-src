@@ -62,7 +62,7 @@ jobs:
         with:
           # musl-tools provide `musl-gcc` which is required for `ring` which is required for `rustls` et al.
           packages: musl-tools
-          version: 1.0
+          version: 1.1
         if: ${{ matrix.target == 'x86_64-unknown-linux-musl'}}
 
       - name: Install Rust toolchain
@@ -75,7 +75,7 @@ jobs:
           profile: minimal
 
       - name: Install Erlang (non-macos)
-        uses: erlef/setup-beam@v1.15.0
+        uses: erlef/setup-beam@v1.15.2
         with:
           otp-version: "25.1"
           elixir-version: "1.14.1"
@@ -89,7 +89,7 @@ jobs:
         if: ${{ matrix.os == 'macos-latest' }} # setup-beam does not support macOS
 
       - name: Handle Rust dependencies caching
-        uses: Swatinem/rust-cache@v1
+        uses: Swatinem/rust-cache@v2
         with:
           key: v1-${{ matrix.target }}
 
@@ -111,6 +111,7 @@ jobs:
       - name: test/project_erlang
         run: |
           gleam run
+          gleam check
           gleam test
           gleam docs build
         working-directory: ./test/project_erlang
@@ -127,6 +128,7 @@ jobs:
       - name: test/project_javascript
         run: |
           gleam run
+          gleam check
           gleam test
           gleam docs build
         working-directory: ./test/project_javascript
@@ -141,7 +143,7 @@ jobs:
           gleam docs build
 
           # Assert that module metadata has been written
-          ls build/dev/erlang/lib_project/_gleam_artefacts/lib_project.gleam_module
+          ls build/dev/erlang/lib_project/_gleam_artefacts/lib_project.cache
 
           # Assert that HTML docs and their assets have been written
           ls build/dev/docs/lib_project/index.html
@@ -264,7 +266,7 @@ jobs:
           components: clippy
 
       - name: Handle Rust dependencies caching
-        uses: Swatinem/rust-cache@v1
+        uses: Swatinem/rust-cache@v2
         with:
           key: v1-linux-gnu
 
@@ -293,15 +295,20 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v3.0.0
 
+      - name: Install Deno
+        uses: denoland/setup-deno@v1
+        with:
+          deno-version: v1.x
+
       - name: Install Erlang
-        uses: erlef/setup-beam@v1.15.0
+        uses: erlef/setup-beam@v1.15.2
         with:
           otp-version: "25.1"
           elixir-version: "1.14.1"
           rebar3-version: "3"
 
       - name: Download Gleam binary from previous job
-        uses: actions/download-artifact@v2
+        uses: actions/download-artifact@v3
         with:
           name: gleam
           path: ./test
@@ -318,8 +325,12 @@ jobs:
         run: make clean erlang
         working-directory: ./test/language
 
-      - name: test/language JavaScript
+      - name: test/language JavaScript with Node
         run: make clean javascript
+        working-directory: ./test/language
+
+      - name: test/language Javascript with Deno
+        run: make clean deno
         working-directory: ./test/language
 
       - name: test/compile_package0
@@ -333,3 +344,7 @@ jobs:
       - name: Test JavaScript prelude
         run: make
         working-directory: ./test/javascript_prelude
+
+      - name: Test export of hex tarball
+        run: make test
+        working-directory: ./test/hextarball

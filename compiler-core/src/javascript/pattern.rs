@@ -1,7 +1,12 @@
 use super::{expression::is_js_scalar, *};
 use crate::type_::{FieldMap, PatternConstructor};
+use lazy_static::lazy_static;
 
 pub static ASSIGNMENT_VAR: &str = "$";
+
+lazy_static! {
+    pub static ref ASSIGNMENT_VAR_SMOL_STR: SmolStr = ASSIGNMENT_VAR.into();
+}
 
 #[derive(Debug)]
 enum Index<'a> {
@@ -62,11 +67,11 @@ impl<'module_ctx, 'expression_gen, 'a> Generator<'module_ctx, 'expression_gen, '
         }
     }
 
-    fn next_local_var(&mut self, name: &'a str) -> Document<'a> {
+    fn next_local_var(&mut self, name: &'a SmolStr) -> Document<'a> {
         self.expression_generator.next_local_var(name)
     }
 
-    fn local_var(&mut self, name: &'a str) -> Document<'a> {
+    fn local_var(&mut self, name: &'a SmolStr) -> Document<'a> {
         self.expression_generator.local_var(name)
     }
 
@@ -116,7 +121,7 @@ impl<'module_ctx, 'expression_gen, 'a> Generator<'module_ctx, 'expression_gen, '
 
     fn path_document(&self) -> Document<'a> {
         concat(self.path.iter().map(|segment| match segment {
-            Index::Int(i) => Document::String(format!("[{}]", i)),
+            Index::Int(i) => Document::String(format!("[{i}]")),
             // TODO: escape string if needed
             Index::String(s) => docvec!(".", s),
             Index::ByteAt(i) => docvec!(".byteAt(", i, ")"),
@@ -251,7 +256,11 @@ impl<'module_ctx, 'expression_gen, 'a> Generator<'module_ctx, 'expression_gen, '
             }
 
             ClauseGuard::Constant(constant) => {
-                return expression::constant_expression(self.expression_generator.tracker, constant)
+                return expression::guard_constant_expression(
+                    &mut self.assignments,
+                    self.expression_generator.tracker,
+                    constant,
+                )
             }
         })
     }
@@ -359,9 +368,9 @@ impl<'module_ctx, 'expression_gen, 'a> Generator<'module_ctx, 'expression_gen, '
                 ..
             } => {
                 self.push_string_prefix_check(subject.clone(), left_side_string);
-                self.push_string_prefix_slice(left_side_string.len());
+                self.push_string_prefix_slice(utf16_no_escape_len(left_side_string));
                 if let AssignName::Variable(right) = right_side_assignment {
-                    self.push_assignment(subject.clone(), right.as_ref());
+                    self.push_assignment(subject.clone(), right);
                 }
                 self.pop();
                 Ok(())
@@ -400,7 +409,10 @@ impl<'module_ctx, 'expression_gen, 'a> Generator<'module_ctx, 'expression_gen, '
                                 }
                             };
                             let label = fields.iter().find_map(find);
-                            self.push_string(label.expect("argument present in field map"));
+                            match label {
+                                Some(label) => self.push_string(label),
+                                None => self.push_int(index),
+                            }
                         }
                     }
                     self.traverse_pattern(subject, &arg.value)?;
@@ -438,7 +450,7 @@ impl<'module_ctx, 'expression_gen, 'a> Generator<'module_ctx, 'expression_gen, '
                                 Ok(())
                             }
                             _ => Err(Error::Unsupported {
-                                feature: "This bit string size option in patterns".to_string(),
+                                feature: "This bit string size option in patterns".into(),
                                 location: segment.location,
                             }),
                         },
@@ -460,7 +472,7 @@ impl<'module_ctx, 'expression_gen, 'a> Generator<'module_ctx, 'expression_gen, '
                         }
 
                         _ => Err(Error::Unsupported {
-                            feature: "This bit string segment option in patterns".to_string(),
+                            feature: "This bit string segment option in patterns".into(),
                             location: segment.location,
                         }),
                     }?;
@@ -470,13 +482,13 @@ impl<'module_ctx, 'expression_gen, 'a> Generator<'module_ctx, 'expression_gen, '
                 Ok(())
             }
             Pattern::VarUsage { location, .. } => Err(Error::Unsupported {
-                feature: "Bit string matching".to_string(),
+                feature: "Bit string matching".into(),
                 location: *location,
             }),
         }
     }
 
-    fn push_assignment(&mut self, subject: Document<'a>, name: &'a str) {
+    fn push_assignment(&mut self, subject: Document<'a>, name: &'a SmolStr) {
         let var = self.next_local_var(name);
         let path = self.path_document();
         self.assignments.push(Assignment {
@@ -574,10 +586,10 @@ impl<'a> CompiledPattern<'a> {
 
 #[derive(Debug)]
 pub struct Assignment<'a> {
-    name: &'a str,
+    pub name: &'a str,
     var: Document<'a>,
-    subject: Document<'a>,
-    path: Document<'a>,
+    pub subject: Document<'a>,
+    pub path: Document<'a>,
 }
 
 impl<'a> Assignment<'a> {
@@ -689,9 +701,9 @@ impl<'a> Check<'a> {
                 has_tail_spread,
             } => {
                 let length_check = Document::String(if has_tail_spread {
-                    format!(".atLeastLength({})", expected_length)
+                    format!(".atLeastLength({expected_length})")
                 } else {
-                    format!(".hasLength({})", expected_length)
+                    format!(".hasLength({expected_length})")
                 });
                 if match_desired {
                     docvec![subject, path, length_check,]
@@ -706,9 +718,9 @@ impl<'a> Check<'a> {
                 has_tail_spread,
             } => {
                 let length_check = Document::String(if has_tail_spread {
-                    format!(".length >= {}", expected_bytes)
+                    format!(".length >= {expected_bytes}")
                 } else {
-                    format!(".length == {}", expected_bytes)
+                    format!(".length == {expected_bytes}")
                 });
                 if match_desired {
                     docvec![subject, path, length_check,]
@@ -742,7 +754,7 @@ pub(crate) fn assign_subject<'a>(
         // If it's not a variable we need to assign it to a variable
         // to avoid rendering the subject expression multiple times
         _ => {
-            let subject = expression_generator.next_local_var(ASSIGNMENT_VAR);
+            let subject = expression_generator.next_local_var(&ASSIGNMENT_VAR_SMOL_STR);
             (subject.clone(), Some(subject))
         }
     }
@@ -757,4 +769,20 @@ pub(crate) fn assign_subjects<'a>(
         out.push(assign_subject(expression_generator, subject))
     }
     out
+}
+// Helper function to calculate length of str as utf16 without escape characters
+fn utf16_no_escape_len(str: &SmolStr) -> usize {
+    let mut filtered_str = String::new();
+    let mut str_iter = str.chars();
+    loop {
+        match str_iter.next() {
+            Some('\\') => match str_iter.next() {
+                Some(c) => filtered_str.push_str(c.to_string().as_str()),
+                None => break,
+            },
+            Some(c) => filtered_str.push_str(c.to_string().as_str()),
+            None => break,
+        }
+    }
+    return filtered_str.encode_utf16().count();
 }

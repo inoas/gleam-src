@@ -2,21 +2,21 @@ use vec1::Vec1;
 
 use super::*;
 
-#[derive(Debug, PartialEq, Clone)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum UntypedExpr {
     Int {
         location: SrcSpan,
-        value: String,
+        value: SmolStr,
     },
 
     Float {
         location: SrcSpan,
-        value: String,
+        value: SmolStr,
     },
 
     String {
         location: SrcSpan,
-        value: String,
+        value: SmolStr,
     },
 
     Sequence {
@@ -26,7 +26,7 @@ pub enum UntypedExpr {
 
     Var {
         location: SrcSpan,
-        name: String,
+        name: SmolStr,
     },
 
     Fn {
@@ -86,7 +86,7 @@ pub enum UntypedExpr {
 
     FieldAccess {
         location: SrcSpan,
-        label: String,
+        label: SmolStr,
         container: Box<Self>,
     },
 
@@ -104,7 +104,11 @@ pub enum UntypedExpr {
     Todo {
         kind: TodoKind,
         location: SrcSpan,
-        label: Option<String>,
+        label: Option<SmolStr>,
+    },
+
+    Panic {
+        location: SrcSpan,
     },
 
     BitString {
@@ -141,6 +145,7 @@ impl UntypedExpr {
             | Self::Float { location, .. }
             | Self::BinOp { location, .. }
             | Self::Tuple { location, .. }
+            | Self::Panic { location, .. }
             | Self::String { location, .. }
             | Self::BitString { location, .. }
             | Self::Assignment { location, .. }
@@ -210,6 +215,14 @@ impl UntypedExpr {
             Self::String { .. } | Self::Int { .. } | Self::Float { .. }
         )
     }
+
+    /// Returns `true` if the untyped expr is [`Call`].
+    ///
+    /// [`Call`]: UntypedExpr::Call
+    #[must_use]
+    pub fn is_call(&self) -> bool {
+        matches!(self, Self::Call { .. })
+    }
 }
 
 impl HasLocation for UntypedExpr {
@@ -218,9 +231,9 @@ impl HasLocation for UntypedExpr {
     }
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Use {
     pub location: SrcSpan,
     pub call: Box<UntypedExpr>,
-    pub assignments: Vec<(AssignName, SrcSpan)>,
+    pub assignments: Vec<UntypedPattern>,
 }

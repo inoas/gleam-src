@@ -42,7 +42,7 @@ fn type_vars() {
 #[test]
 fn module_types() {
     // Types are printed with module qualifiers
-    let module_name = vec!["name".to_string()];
+    let module_name = "name".into();
     insta::assert_snapshot!(record_definition(
         "PetCat",
         &[(
@@ -50,7 +50,7 @@ fn module_types() {
             Arc::new(type_::Type::App {
                 public: true,
                 module: module_name,
-                name: "my_type".to_string(),
+                name: "my_type".into(),
                 args: vec![]
             })
         )]
@@ -166,7 +166,11 @@ fn main() {
 }
 "#
     );
+}
 
+#[test]
+fn record_spread1() {
+    // Test binding to a record field with the spread operator
     // Test binding to a record field with the spread operator and a labelled argument
     assert_erl!(
         r#"
@@ -181,7 +185,10 @@ fn main() {
 }
 "#
     );
+}
 
+#[test]
+fn record_spread2() {
     // Test binding to a record field with the spread operator with both a labelled argument and a positional argument
     assert_erl!(
         r#"
@@ -196,7 +203,10 @@ fn main() {
 }
 "#
     );
+}
 
+#[test]
+fn record_spread3() {
     // Test binding to a record field with the spread operator in a match
     assert_erl!(
         r#"
@@ -337,6 +347,19 @@ pub fn main() {
     let thing = Thing(1, 2)
     thing
   }.a
+}"
+    );
+}
+
+// https://github.com/gleam-lang/gleam/issues/1981
+#[test]
+fn imported_qualified_constructor_as_fn_name_escape() {
+    assert_erl!(
+        ("other_package", "other_module", "pub type Let { Let(Int) }"),
+        "import other_module
+
+pub fn main() {
+  other_module.Let
 }"
     );
 }
