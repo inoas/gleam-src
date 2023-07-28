@@ -224,6 +224,6 @@ jobs:
           labels: |
             org.opencontainers.image.title=gleam
             org.opencontainers.image.url=https://gleam.run
-            org.opencontainers.image.source=https://github.com/inoas/gleam
+            org.opencontainers.image.source=https://github.com/inoas/gleam-src
             org.opencontainers.image.version=nightly-${{ matrix.base-image }}
             org.opencontainers.image.licenses=Apache-2.0
