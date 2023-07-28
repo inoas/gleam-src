@@ -53,27 +53,27 @@ jobs:
       matrix:
         target:
           - x86_64-unknown-linux-musl
-          # - aarch64-unknown-linux-musl
-          # - x86_64-apple-darwin
-          # - aarch64-apple-darwin
-          # - x86_64-pc-windows-msvc
+          - aarch64-unknown-linux-musl
+          - x86_64-apple-darwin
+          - aarch64-apple-darwin
+          - x86_64-pc-windows-msvc
         toolchain: [stable]
         include:
           - os: ubuntu-latest
             target: x86_64-unknown-linux-musl
             use-cross: true
-          # - os: ubuntu-latest
-          #   target: aarch64-unknown-linux-musl
-          #   use-cross: true
-          # - os: macos-latest
-          #   target: x86_64-apple-darwin
-          #   use-cross: false
-          # - os: macos-11
-          #   target: aarch64-apple-darwin
-          #   use-cross: false
-          # - os: windows-latest
-          #   target: x86_64-pc-windows-msvc
-          #   use-cross: false
+          - os: ubuntu-latest
+            target: aarch64-unknown-linux-musl
+            use-cross: true
+          - os: macos-latest
+            target: x86_64-apple-darwin
+            use-cross: false
+          - os: macos-11
+            target: aarch64-apple-darwin
+            use-cross: false
+          - os: windows-latest
+            target: x86_64-pc-windows-msvc
+            use-cross: false
     steps:
       - name: Checkout repository
         uses: actions/checkout@v3
@@ -116,8 +116,8 @@ jobs:
       - name: Build archive
         shell: bash
         run: |
+          VERSION=nightly
           DAY=$(date +"%y%m%d")
-          VERSION="${GITHUB_REF#refs/tags/}-nightly-${{ github.run_number }}"
 
           if [ "${{ matrix.os }}" = "windows-latest" ]; then
             ARCHIVE="gleam-$VERSION-${{ matrix.target }}.zip"
@@ -134,7 +134,6 @@ jobs:
           openssl dgst -r -sha256 -out "$ARCHIVE".sha256 "$ARCHIVE"
           openssl dgst -r -sha512 -out "$ARCHIVE".sha512 "$ARCHIVE"
           echo "ASSET=$ARCHIVE" >> $GITHUB_ENV
-
           echo "DAY=$DAY" >> $GITHUB_ENV
 
       - name: Ensure binary successfully boots
